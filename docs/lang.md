@@ -18,6 +18,12 @@ Zulu is a statically typed, globally inferred functional language.
     - In base 10 can put a decimal point for decimal values.
     - Leading 0 can be omitted: `0.14` = `.14`
 
+  - String literals
+    - A terminated `"` string of text.
+    - Can include newlines
+    - Special characters escaped with `\\`
+    - Templating using `#{expr}`, `expr` needs to have a string prototype
+
 - Math expressions
 
   Just like in C:
