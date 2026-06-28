@@ -1,0 +1,61 @@
+# Language specification (rough)
+
+Zulu is a statically typed, globally inferred functional language.
+
+## Concrete Syntax
+
+- Tokens:
+
+  - Identifiers
+    - Need to start from a [letter;_;@;!]
+    - Can include digits
+    - Can include -, _, #, @, !
+    - _ is treated as a wildcard
+
+  - Numbers
+    - In base 10, need to start from a digit with optional sign [-;+]
+    - In other bases, can specify the base using 0[b;x;o;d][content]
+    - In base 10 can put a decimal point for decimal values.
+    - Leading 0 can be omitted: `0.14` = `.14`
+
+- Math expressions
+
+  Just like in C:
+
+  - `38 + 4`
+  - `44 - 2`
+  - `84 / 2`
+  - `21 * 2`
+
+- Comparison operators
+
+  - `4 > 2`
+  - `4 < 2`
+  - `4 >= 2`
+  - `4 <= 2`
+  - `4 = 2`
+  - `2 = 2.0 // true`
+  - `2 == 2.0 // false`
+
+- Variable declaration and closures
+
+  Variable declarations are left-associative
+
+  - `ident=expr;expr`
+    e.g
+  - `x = 10; x > 8`
+  - `x = 10; ( x > 8 )`
+  - `x = 10; ( x=12; x > 11 )`
+  - `x = 10;x = 12;x > 11`
+
+  Closures
+
+  - `[x; x * x]`
+  - `[x; x * x] 2`
+  - `[x y; x * y]`
+  - `[f x y; f x * f y]`
+  - `[f x y; f x * f y] [x; x * x] 2 3`
+
+  - `sq=[x; x * x];[f x y; f x * f y] sq 2 3`
+
+TODO
