@@ -1,6 +1,32 @@
 const std = @import("std");
 
-const TokenType = enum { PLUS, MINUS, ASTERISK, SLASH, EQ, NUMBER, EOF };
+const TokenType = enum {
+    PLUS,
+    MINUS,
+    SLASH,
+    ASTERISK,
+    DOT,
+    EQ,
+    GT,
+    LT,
+    SEMICOLON,
+
+    GTEQ,
+    LTEQ,
+    EQEQ,
+    SLASHSLASH,
+
+    LPAR,
+    RPAR,
+    LBRA,
+    RBRA,
+
+    IDENT,
+    NUMBER,
+    STRING,
+
+    EOF,
+};
 
 const Location = struct { line: usize, column: usize };
 
@@ -37,18 +63,31 @@ pub const Lexer = struct {
     fn scanToken(self: *Lexer) !void {
         const char = self.advance();
         switch (char) {
-            '+', '-', '/', '*', '=' => {
+            '+', '-', '/', '*', '=', '(', ')', '[', ']', ';', '>', '<' => {
                 return try self.addToken(switch (char) {
                     '+' => .PLUS,
                     '-' => .MINUS,
                     '*' => .ASTERISK,
-                    '/' => .SLASH,
-                    '=' => .EQ,
+                    '/' => if (self.match('/')) .SLASHSLASH else .SLASH,
+                    '>' => if (self.match('=')) .GTEQ else .GT,
+                    '<' => if (self.match('=')) .LTEQ else .LT,
+                    '=' => if (self.match('=')) .EQEQ else .EQ,
+                    '(' => .LPAR,
+                    ')' => .RPAR,
+                    '[' => .LBRA,
+                    ']' => .RBRA,
+                    ';' => .SEMICOLON,
                     else => .EOF,
                 });
             },
             else => {
-                if (std.ascii.isDigit(char)) try self.digit() else if (std.ascii.isWhitespace(char)) {
+                if (std.ascii.isDigit(char) or char == '.') {
+                    try self.number(char);
+                } else if (isValidIdentChar(char)) {
+                    try self.identifier();
+                } else if (char == '"') {
+                    try self.string();
+                } else if (std.ascii.isWhitespace(char)) {
                     if (char == '\n') {
                         self.line += 1;
                         self.column = 1;
@@ -60,13 +99,48 @@ pub const Lexer = struct {
         }
     }
 
-    fn digit(self: *Lexer) !void {
-        while (std.ascii.isDigit(self.peek())) self.skip();
+    fn number(self: *Lexer, char: u8) !void {
+        var point = char == '.';
+        while (!self.isAtEnd() and std.ascii.isDigit(self.peek())) self.skip();
+
+        if (!self.isAtEnd() and self.peek() == '.') {
+            if (point) return error.UNMATCHED_TOKEN;
+            point = true;
+            self.skip();
+            while (std.ascii.isDigit(self.peek())) self.skip();
+        }
+
+        if (!self.isAtEnd() and self.peek() == '.') return error.UNMATCHED_TOKEN;
+
         try self.addToken(.NUMBER);
+    }
+
+    fn identifier(self: *Lexer) !void {
+        while (!self.isAtEnd() and (isValidIdentChar(self.peek()) or std.ascii.isDigit(self.peek()))) self.skip();
+
+        try self.addToken(.IDENT);
+    }
+
+    fn string(self: *Lexer) !void {
+        while (!self.isAtEnd() and self.peek() != '"') self.skip();
+
+        if (self.isAtEnd() and self.source[self.current - 1] != '"') return error.UNTERMINATED_STRING_LITERAL;
+
+        self.skip();
+
+        try self.addToken(.STRING);
     }
 
     fn peek(self: *Lexer) u8 {
         return self.source[self.current];
+    }
+
+    fn match(self: *Lexer, char: u8) bool {
+        if (self.peek() == char) {
+            self.current += 1;
+            return true;
+        }
+        return false;
     }
 
     fn advance(self: *Lexer) u8 {
@@ -87,3 +161,7 @@ pub const Lexer = struct {
         return self.current == self.source.len;
     }
 };
+
+fn isValidIdentChar(char: u8) bool {
+    return (std.ascii.isAlphabetic(char) or char == '@' or char == '!' or char == '#' or char == '_');
+}

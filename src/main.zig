@@ -12,7 +12,7 @@ pub fn main(init: std.process.Init) !void {
     //     std.log.info("arg: {s}", .{arg});
     // }
 
-    var instance = try lexer.Lexer.init(arena, "24 + *  -");
+    var instance = try lexer.Lexer.init(arena, "[x=.10;x + 10.0];([y=20;y+x >= 10]);\"test\"");
     defer instance.deinit();
 
     const tokens = try instance.scanTokens();
