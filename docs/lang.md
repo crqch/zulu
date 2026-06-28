@@ -6,6 +6,11 @@ Zulu is a statically typed, globally inferred functional language.
 
 - Tokens:
 
+  - Types:
+    `PLUS, MINUS, SLASH, ASTERISK, EQ, GT, LT, GTEQ, LTEQ, EQEQ, SLASHSLASH, DOT, SEMICOLON`
+    `LPAR, RPAR, LBRA, RBRA`
+    `IDENT, NUMBER, STRING`
+
   - Identifiers
     - Need to start from a [letter;_;@;!]
     - Can include digits
