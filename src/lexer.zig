@@ -124,13 +124,24 @@ pub const Lexer = struct {
     }
 
     fn string(self: *Lexer) !void {
-        while (!self.isAtEnd() and self.peek() != '"') self.skip();
+        var height: usize = 0;
+        while (!self.isAtEnd() and (self.peek() != '"' or self.escapeCharacter())) {
+            if (self.peek() == '\n') height += 1;
+            self.skip();
+        }
 
         if (self.isAtEnd() and self.source[self.current - 1] != '"') return error.UNTERMINATED_STRING_LITERAL;
 
         self.skip();
 
         try self.addToken(.STRING);
+
+        self.line += height;
+    }
+
+    fn escapeCharacter(self: *Lexer) bool {
+        if (self.current < 1) return false;
+        return self.source[self.current - 1] == '\\';
     }
 
     fn peek(self: *Lexer) u8 {
