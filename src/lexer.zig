@@ -1,5 +1,5 @@
 const std = @import("std");
-const testing = @import("std").testing;
+const testing = std.testing;
 
 const TokenType = enum {
     PLUS,
