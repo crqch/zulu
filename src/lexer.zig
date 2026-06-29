@@ -91,7 +91,7 @@ pub const Lexer = struct {
                     '[' => .LBRA,
                     ']' => .RBRA,
                     ';' => .SEMICOLON,
-                    else => .EOF,
+                    else => unreachable,
                 });
             },
             else => {
