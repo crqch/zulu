@@ -348,3 +348,36 @@ test "lexer - string literals" {
 
     try tsting.runTests();
 }
+
+test "lexer - identifiers and keywords" {
+    var tsting = Testing.init(&[_]Testing.TestCase{
+        .{
+            .source = "test @x _x !x #x x#test x!@##",
+            .expected = &.{
+                .{ .type = .IDENT, .lexeme = "test" },
+                .{ .type = .IDENT, .lexeme = "@x" },
+                .{ .type = .IDENT, .lexeme = "_x" },
+                .{ .type = .IDENT, .lexeme = "!x" },
+                .{ .type = .IDENT, .lexeme = "#x" },
+                .{ .type = .IDENT, .lexeme = "x#test" },
+                .{ .type = .IDENT, .lexeme = "x!@##" },
+                .{ .type = .EOF, .lexeme = "" },
+            },
+        },
+        .{
+            .source = "test else if true x @yz false",
+            .expected = &.{
+                .{ .type = .IDENT, .lexeme = "test" },
+                .{ .type = .KW_ELSE, .lexeme = "else" },
+                .{ .type = .KW_IF, .lexeme = "if" },
+                .{ .type = .KW_TRUE, .lexeme = "true" },
+                .{ .type = .IDENT, .lexeme = "x" },
+                .{ .type = .IDENT, .lexeme = "@yz" },
+                .{ .type = .KW_FALSE, .lexeme = "false" },
+                .{ .type = .EOF, .lexeme = "" },
+            },
+        },
+    });
+
+    try tsting.runTests();
+}
