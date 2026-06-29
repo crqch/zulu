@@ -197,3 +197,32 @@ const Testing = struct {
         }
     }
 };
+
+test "lexer - arithmetic operators and numbers" {
+    var tsting = Testing.init(&[_]Testing.TestCase{
+        .{
+            .source = "2 + 2 * 54 + .2",
+            .expected = &.{
+                .{ .type = .NUMBER, .lexeme = "2" },
+                .{ .type = .PLUS, .lexeme = "+" },
+                .{ .type = .NUMBER, .lexeme = "2" },
+                .{ .type = .ASTERISK, .lexeme = "*" },
+                .{ .type = .NUMBER, .lexeme = "54" },
+                .{ .type = .PLUS, .lexeme = "+" },
+                .{ .type = .NUMBER, .lexeme = ".2" },
+                .{ .type = .EOF, .lexeme = "" },
+            },
+        },
+        .{
+            .source = "10.5 - 3",
+            .expected = &.{
+                .{ .type = .NUMBER, .lexeme = "10.5" },
+                .{ .type = .MINUS, .lexeme = "-" },
+                .{ .type = .NUMBER, .lexeme = "3" },
+                .{ .type = .EOF, .lexeme = "" },
+            },
+        },
+    });
+
+    try tsting.runTests();
+}
