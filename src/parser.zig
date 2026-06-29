@@ -40,7 +40,7 @@ pub const Parser = struct {
     fn isAtPrimaryStart(self: *Parser) bool {
         const token = self.tokens[self.current];
         const tokenType = token.type;
-        return tokenType == .NUMBER or tokenType == .STRING or tokenType == .KW_TRUE or tokenType == .KW_FALSE or tokenType == .LPAR;
+        return tokenType == .NUMBER or tokenType == .STRING or tokenType == .KW_TRUE or tokenType == .KW_FALSE or tokenType == .LPAR or tokenType == .IDENT;
     }
 
     fn previousToken(self: *Parser) Token {
