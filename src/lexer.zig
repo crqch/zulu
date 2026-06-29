@@ -226,3 +226,80 @@ test "lexer - arithmetic operators and numbers" {
 
     try tsting.runTests();
 }
+
+test "lexer - variable declarations and closures" {
+    var tsting = Testing.init(&[_]Testing.TestCase{
+        .{
+            .source = "x=10;y=20;x+y*4",
+            .expected = &.{
+                .{ .type = .IDENT, .lexeme = "x" },
+                .{ .type = .EQ, .lexeme = "=" },
+                .{ .type = .NUMBER, .lexeme = "10" },
+                .{ .type = .SEMICOLON, .lexeme = ";" },
+
+                .{ .type = .IDENT, .lexeme = "y" },
+                .{ .type = .EQ, .lexeme = "=" },
+                .{ .type = .NUMBER, .lexeme = "20" },
+                .{ .type = .SEMICOLON, .lexeme = ";" },
+
+                .{ .type = .IDENT, .lexeme = "x" },
+                .{ .type = .PLUS, .lexeme = "+" },
+                .{ .type = .IDENT, .lexeme = "y" },
+                .{ .type = .ASTERISK, .lexeme = "*" },
+                .{ .type = .NUMBER, .lexeme = "4" },
+                .{ .type = .EOF, .lexeme = "" },
+            },
+        },
+        .{
+            .source = "x=10;y=20;z=x>=y",
+            .expected = &.{
+                .{ .type = .IDENT, .lexeme = "x" },
+                .{ .type = .EQ, .lexeme = "=" },
+                .{ .type = .NUMBER, .lexeme = "10" },
+                .{ .type = .SEMICOLON, .lexeme = ";" },
+
+                .{ .type = .IDENT, .lexeme = "y" },
+                .{ .type = .EQ, .lexeme = "=" },
+                .{ .type = .NUMBER, .lexeme = "20" },
+                .{ .type = .SEMICOLON, .lexeme = ";" },
+
+                .{ .type = .IDENT, .lexeme = "z" },
+                .{ .type = .EQ, .lexeme = "=" },
+                .{ .type = .IDENT, .lexeme = "x" },
+                .{ .type = .GTEQ, .lexeme = ">=" },
+                .{ .type = .IDENT, .lexeme = "y" },
+                .{ .type = .EOF, .lexeme = "" },
+            },
+        },
+        .{
+            .source = "[f x y;f x * f y] [x; x*x] 2 4",
+            .expected = &.{
+                .{ .type = .LBRA, .lexeme = "[" },
+                .{ .type = .IDENT, .lexeme = "f" },
+                .{ .type = .IDENT, .lexeme = "x" },
+                .{ .type = .IDENT, .lexeme = "y" },
+                .{ .type = .SEMICOLON, .lexeme = ";" },
+                .{ .type = .IDENT, .lexeme = "f" },
+                .{ .type = .IDENT, .lexeme = "x" },
+                .{ .type = .ASTERISK, .lexeme = "*" },
+                .{ .type = .IDENT, .lexeme = "f" },
+                .{ .type = .IDENT, .lexeme = "y" },
+                .{ .type = .RBRA, .lexeme = "]" },
+
+                .{ .type = .LBRA, .lexeme = "[" },
+                .{ .type = .IDENT, .lexeme = "x" },
+                .{ .type = .SEMICOLON, .lexeme = ";" },
+                .{ .type = .IDENT, .lexeme = "x" },
+                .{ .type = .ASTERISK, .lexeme = "*" },
+                .{ .type = .IDENT, .lexeme = "x" },
+                .{ .type = .RBRA, .lexeme = "]" },
+                .{ .type = .NUMBER, .lexeme = "2" },
+                .{ .type = .NUMBER, .lexeme = "4" },
+
+                .{ .type = .EOF, .lexeme = "" },
+            },
+        },
+    });
+
+    try tsting.runTests();
+}
