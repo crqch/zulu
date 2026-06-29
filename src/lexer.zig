@@ -131,8 +131,10 @@ pub const Lexer = struct {
 
     fn identifier(self: *Lexer) !void {
         while (!self.isAtEnd() and (isValidIdentChar(self.peek()) or std.ascii.isDigit(self.peek()))) self.skip();
+        const lower = try lowerOfString(self.allocator, self.source[self.start..self.current]);
+        defer self.allocator.free(lower);
 
-        const tokenType = keywords.get(self.source[self.start..self.current]) orelse .IDENT;
+        const tokenType = keywords.get(lower) orelse .IDENT;
         try self.addToken(tokenType);
     }
 
@@ -190,6 +192,16 @@ pub const Lexer = struct {
 
 fn isValidIdentChar(char: u8) bool {
     return (std.ascii.isAlphabetic(char) or char == '@' or char == '!' or char == '#' or char == '_');
+}
+
+fn lowerOfString(allocator: std.mem.Allocator, str: []const u8) ![]u8 {
+    var t = try allocator.alloc(u8, str.len);
+
+    for (str, 0..) |char, i| {
+        t[i] = std.ascii.toLower(char);
+    }
+
+    return t;
 }
 
 const Testing = struct {
@@ -374,6 +386,16 @@ test "lexer - identifiers and keywords" {
                 .{ .type = .IDENT, .lexeme = "x" },
                 .{ .type = .IDENT, .lexeme = "@yz" },
                 .{ .type = .KW_FALSE, .lexeme = "false" },
+                .{ .type = .EOF, .lexeme = "" },
+            },
+        },
+        .{
+            .source = "test ELSE IF TruE",
+            .expected = &.{
+                .{ .type = .IDENT, .lexeme = "test" },
+                .{ .type = .KW_ELSE, .lexeme = "ELSE" },
+                .{ .type = .KW_IF, .lexeme = "IF" },
+                .{ .type = .KW_TRUE, .lexeme = "TruE" },
                 .{ .type = .EOF, .lexeme = "" },
             },
         },
