@@ -26,12 +26,24 @@ const TokenType = enum {
     NUMBER,
     STRING,
 
+    KW_TRUE,
+    KW_FALSE,
+    KW_IF,
+    KW_ELSE,
+
     EOF,
 };
 
 const Location = struct { line: usize, column: usize };
 
 const Token = struct { type: TokenType, lexeme: []const u8, location: Location };
+
+const keywords = std.StaticStringMap(TokenType).initComptime(.{
+    .{ "true", .KW_TRUE },
+    .{ "false", .KW_FALSE },
+    .{ "if", .KW_IF },
+    .{ "else", .KW_ELSE },
+});
 
 pub const Lexer = struct {
     allocator: std.mem.Allocator,
@@ -120,7 +132,8 @@ pub const Lexer = struct {
     fn identifier(self: *Lexer) !void {
         while (!self.isAtEnd() and (isValidIdentChar(self.peek()) or std.ascii.isDigit(self.peek()))) self.skip();
 
-        try self.addToken(.IDENT);
+        const tokenType = keywords.get(self.source[self.start..self.current]) orelse .IDENT;
+        try self.addToken(tokenType);
     }
 
     fn string(self: *Lexer) !void {
