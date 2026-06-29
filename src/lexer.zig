@@ -1,4 +1,5 @@
 const std = @import("std");
+const testing = @import("std").testing;
 
 const TokenType = enum {
     PLUS,
@@ -167,49 +168,32 @@ fn isValidIdentChar(char: u8) bool {
     return (std.ascii.isAlphabetic(char) or char == '@' or char == '!' or char == '#' or char == '_');
 }
 
-test "lexer - arithmetic operators and numbers" {
-    const TestCase = struct {
+const Testing = struct {
+    cases: []const TestCase,
+
+    pub const TestCase = struct {
         source: []const u8,
         expected: []const struct {
-            .kind= TokenType,
-            
+            type: TokenType,
+            lexeme: []const u8,
         },
     };
 
-    const cases = [_]TestCase{
-        .{
-            .source = "2 + 2 * 54 + .2",
-            .expected = &.{
-                .{ .kind = .NUMBER, .lexeme = "2" },
-                .{ .kind = .PLUS, .lexeme = "+" },
-                .{ .kind = .NUMBER, .lexeme = "2" },
-                .{ .kind = .ASTERISK, .lexeme = "*" },
-                .{ .kind = .NUMBER, .lexeme = "54" },
-                .{ .kind = .PLUS, .lexeme = "+" },
-                .{ .kind = .NUMBER, .lexeme = ".2" },
-                .{ .kind = .EOF, .lexeme = "" },
-            },
-        },
-        .{
-            .source = "10.5 - 3",
-            .expected = &.{
-                .{ .kind = .NUMBER, .lexeme = "10.5" },
-                .{ .kind = .MINUS, .lexeme = "-" },
-                .{ .kind = .NUMBER, .lexeme = "3" },
-                .{ .kind = .EOF, .lexeme = "" },
-            },
-        },
-    };
+    pub fn init(_cases: []const TestCase) Testing {
+        return Testing{ .cases = _cases };
+    }
 
-    for (cases) |case| {
-        var lexer = try Lexer.init(case.source);
-        defer lexer.deinit();
-        const tokens = lexer.scanTokens();
+    pub fn runTests(self: *Testing) !void {
+        for (self.cases) |case| {
+            var lexer = try Lexer.init(std.testing.allocator, case.source);
+            defer lexer.deinit();
+            const tokens = try lexer.scanTokens();
 
-        for (case.expected, tokens) |expected_token, token| {
-            try testing.expectEqual(expected_token.kind, token.kind);
+            for (case.expected, tokens) |expected_token, token| {
+                try testing.expectEqual(expected_token.type, token.type);
 
-            try testing.expectEqualStrings(expected_token.lexeme, token.lexeme);
+                try testing.expectEqualStrings(expected_token.lexeme, token.lexeme);
+            }
         }
     }
-}
+};
