@@ -86,7 +86,7 @@ pub const AstPrinter = struct {
 
                 try self.printNode(dec.expression.*, level + 1);
 
-                try self.printNode(dec.expression.*, level + 1);
+                try self.printNode(dec.block.*, level + 1);
             },
             .String => |str| {
                 try self.buffer.print(self.allocator, "String\n", .{});
