@@ -314,3 +314,24 @@ test "lexer - variable declarations and closures" {
 
     try tsting.runTests();
 }
+
+test "lexer - string literals" {
+    var tsting = Testing.init(&[_]Testing.TestCase{
+        .{
+            .source = "\"test\"",
+            .expected = &.{
+                .{ .type = .STRING, .lexeme = "\"test\"" },
+                .{ .type = .EOF, .lexeme = "" },
+            },
+        },
+        .{
+            .source = "\"test\n\\n\\\"<-- this is a \\\" inside a string literal!\"",
+            .expected = &.{
+                .{ .type = .STRING, .lexeme = "\"test\n\\n\\\"<-- this is a \\\" inside a string literal!\"" },
+                .{ .type = .EOF, .lexeme = "" },
+            },
+        },
+    });
+
+    try tsting.runTests();
+}
