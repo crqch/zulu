@@ -1,7 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 
-const TokenType = enum {
+pub const TokenType = enum {
     PLUS,
     MINUS,
     SLASH,
@@ -36,7 +36,7 @@ const TokenType = enum {
 
 const Location = struct { line: usize, column: usize };
 
-const Token = struct { type: TokenType, lexeme: []const u8, location: Location };
+pub const Token = struct { type: TokenType, lexeme: []const u8, location: Location };
 
 const keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "true", .KW_TRUE },
