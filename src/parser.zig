@@ -16,7 +16,9 @@ pub const Parser = struct {
     }
 
     pub fn parse(self: *Parser) !*Expression {
-        return self.declaration();
+        const expr = self.declaration();
+        if (!self.matchToken(.EOF)) return error.EOF_NOT_REACHED;
+        return expr;
     }
 
     fn matchToken(self: *Parser, tokenType: TokenType) bool {
