@@ -26,7 +26,7 @@ Zulu is a statically typed, globally inferred functional language.
   - String literals
     - A terminated `"` string of text.
     - Can include newlines
-    - Special characters escaped with `\\`
+    - Special characters escaped with `\`
     - Templating using `#{expr}`, `expr` needs to have a string prototype
 
 - Math expressions
