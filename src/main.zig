@@ -13,21 +13,21 @@ pub const std_options: std.Options = .{
 pub fn main(init: std.process.Init) !void {
     const arena: std.mem.Allocator = init.arena.allocator();
 
-    // const args = try init.minimal.args.toSlice(arena);
-    // for (args) |arg| {
-    //     std.log.info("arg: {s}", .{arg});
-    // }
+    const args = try init.minimal.args.toSlice(arena);
+    for (args) |arg| {
+        std.log.info("arg: {s}", .{arg});
+    }
 
-    //var lexer = try Lexer.init(arena, "[x;x + 10.0];10");
-    var lexer = try Lexer.init(arena, "f=[y;y*y];x=10;f x + x+42");
-    // var lexer = try Lexer.init(arena, "2+2");
+    if (args.len != 2) return error.NO_INPUT;
+
+    var lexer = try Lexer.init(arena, args[1]);
     defer lexer.deinit();
 
     const tokens = try lexer.scanTokens();
 
-    for (tokens) |token| {
-        std.log.info("[{}] lexeme: \"{s}\" - {} ", .{ token.type, token.lexeme, token.location });
-    }
+    // for (tokens) |token| {
+    //     std.log.info("[{}] lexeme: \"{s}\" - {} ", .{ token.type, token.lexeme, token.location });
+    // }
 
     var parser = Parser.init(arena, tokens);
     const expr = try parser.parse();
