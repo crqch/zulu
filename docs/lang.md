@@ -64,7 +64,7 @@ Zulu is a statically typed, globally inferred functional language.
   - `x = 10; ( x=12; x > 11 )`
   - `x = 10;x = 12;x > 11`
 
-  Closures
+  Lambdas
 
   - `[x; x * x]`
   - `[x; x * x] 2`
@@ -73,5 +73,9 @@ Zulu is a statically typed, globally inferred functional language.
   - `[f x y; f x * f y] [x; x * x] 2 3`
 
   - `sq=[x; x * x];[f x y; f x * f y] sq 2 3`
+
+  To make a lambda recursive, there should be a declaration to an identifier starting with `@` character:
+
+  `@fib=[x; if (x < 1) 1 else fib (x - 1) + fib (x - 2)];@fib 10`
 
 TODO
