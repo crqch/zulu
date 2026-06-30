@@ -226,9 +226,11 @@ pub const Parser = struct {
                 },
             };
         } else if (self.matchToken(.STRING)) {
+            const value = try self.stringOfLexeme(token.lexeme);
+
             expr.* = Expression{
                 .String = .{
-                    .value = token.lexeme,
+                    .value = value,
                 },
             };
         } else if (self.matchToken(.IDENT)) {
@@ -255,6 +257,35 @@ pub const Parser = struct {
         }
 
         return expr;
+    }
+
+    fn stringOfLexeme(self: *Parser, lexeme: []const u8) ![]u8 {
+        var string = try std.ArrayList(u8).initCapacity(self.allocator, 0);
+        var escape = false;
+
+        for (lexeme[1 .. lexeme.len - 1]) |c| {
+            if (escape) {
+                var char: u8 = c;
+                switch (c) {
+                    'n' => char = '\n',
+                    'r' => char = '\r',
+                    't' => char = '\t',
+                    '"' => char = '"',
+                    '\\' => char = '\\',
+                    else => return error.UNKNOWN_ESCAPE_CHARACTER,
+                }
+                escape = false;
+                try string.append(self.allocator, char);
+            } else {
+                if (c == '\\') {
+                    escape = true;
+                    continue;
+                }
+                try string.append(self.allocator, c);
+            }
+        }
+
+        return string.items;
     }
 };
 
