@@ -42,7 +42,13 @@ pub const Parser = struct {
     fn isAtPrimaryStart(self: *Parser) bool {
         const token = self.tokens[self.current];
         const tokenType = token.type;
-        return tokenType == .NUMBER or tokenType == .STRING or tokenType == .KW_TRUE or tokenType == .KW_FALSE or tokenType == .LPAR or tokenType == .IDENT;
+        return tokenType == .NUMBER or
+            tokenType == .STRING or
+            tokenType == .KW_TRUE or
+            tokenType == .KW_FALSE or
+            tokenType == .LPAR or
+            tokenType == .LBRA or
+            tokenType == .IDENT;
     }
 
     fn previousToken(self: *Parser) Token {
@@ -149,13 +155,13 @@ pub const Parser = struct {
     }
 
     fn factor(self: *Parser) anyerror!*Expression {
-        var left = try self.lambda();
+        var left = try self.application();
 
         while (self.matchToken(.ASTERISK) or self.matchToken(.SLASH)) {
             const previous = self.previousToken().type;
             const bop = try bopOfToken(previous);
 
-            const right = try self.lambda();
+            const right = try self.application();
 
             const fresh = try self.freshExpression();
 
@@ -167,6 +173,24 @@ pub const Parser = struct {
 
             left = fresh;
         }
+        return left;
+    }
+
+    fn application(self: *Parser) anyerror!*Expression {
+        var left = try self.lambda();
+
+        while (self.isAtPrimaryStart()) {
+            const right = try self.lambda();
+
+            const fresh = try self.freshExpression();
+            fresh.* = Expression{ .Application = .{
+                .callee = left,
+                .value = right,
+            } };
+
+            left = fresh;
+        }
+
         return left;
     }
 
@@ -195,25 +219,7 @@ pub const Parser = struct {
             return block;
         }
 
-        return self.application();
-    }
-
-    fn application(self: *Parser) anyerror!*Expression {
-        var left = try self.primary();
-
-        while (self.isAtPrimaryStart()) {
-            const right = try self.primary();
-
-            const fresh = try self.freshExpression();
-            fresh.* = Expression{ .Application = .{
-                .callee = left,
-                .value = right,
-            } };
-
-            left = fresh;
-        }
-
-        return left;
+        return self.primary();
     }
 
     fn primary(self: *Parser) anyerror!*Expression {
