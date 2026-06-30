@@ -207,7 +207,10 @@ pub const Parser = struct {
             var block = try self.declaration();
             if (!self.matchToken(.RBRA)) return error.LAMBDA_UNRESOLVED;
 
-            for (idents.items) |ident| {
+            const items = idents.items;
+            var i = items.len;
+            while (i > 0) : (i -= 1) {
+                const ident = items[i - 1];
                 const fresh = try self.freshExpression();
                 fresh.* = Expression{ .Lambda = .{
                     .identifier = ident,
