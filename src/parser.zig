@@ -251,7 +251,7 @@ pub const Parser = struct {
                     .value = true,
                 },
             };
-        } else if (self.matchToken(.KW_TRUE)) {
+        } else if (self.matchToken(.KW_FALSE)) {
             expr.* = Expression{
                 .Boolean = .{
                     .value = false,
