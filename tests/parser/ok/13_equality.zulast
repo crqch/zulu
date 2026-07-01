@@ -1,0 +1,7 @@
+2 = 4 == 8
+---
+BinaryOperation( EQEQ )
+ BinaryOperation( EQ )
+  Number( 2 )
+  Number( 4 )
+ Number( 8 )

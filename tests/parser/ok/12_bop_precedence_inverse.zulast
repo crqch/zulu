@@ -1,0 +1,7 @@
+2 * x + 8
+---
+BinaryOperation( ADD )
+ BinaryOperation( MULTIPLY )
+  Number( 2 )
+  Variable( x )
+ Number( 8 )

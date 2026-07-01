@@ -1,0 +1,10 @@
+[x;y=10*x;y+x]
+---
+Lambda ( x )
+ Declaration ( y )
+  BinaryOperation( MULTIPLY )
+   Number( 10 )
+   Variable( x )
+  BinaryOperation( ADD )
+   Variable( y )
+   Variable( x )

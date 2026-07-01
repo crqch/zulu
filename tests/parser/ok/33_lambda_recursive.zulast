@@ -1,0 +1,12 @@
+@rec=[x; @rec (x + 1)];@rec 10
+---
+Declaration ( @rec )
+ Lambda ( x )
+  Application
+   Variable( @rec )
+   BinaryOperation( ADD )
+    Variable( x )
+    Number( 1 )
+ Application
+  Variable( @rec )
+  Number( 10 )

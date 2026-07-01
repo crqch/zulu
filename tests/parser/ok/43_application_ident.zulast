@@ -1,0 +1,12 @@
+f=[x;x*x];f (f 2)
+---
+Declaration ( f )
+ Lambda ( x )
+  BinaryOperation( MULTIPLY )
+   Variable( x )
+   Variable( x )
+ Application
+  Variable( f )
+  Application
+   Variable( f )
+   Number( 2 )

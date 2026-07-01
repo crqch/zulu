@@ -1,0 +1,7 @@
+2 > true <= false
+---
+BinaryOperation( LTEQ )
+ BinaryOperation( GT )
+  Number( 2 )
+  Boolean( True )
+ Boolean( False )

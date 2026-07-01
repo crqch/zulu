@@ -1,0 +1,16 @@
+[x y z; x + y * z] 10 20 30
+---
+Application
+ Application
+  Application
+   Lambda ( x )
+    Lambda ( y )
+     Lambda ( z )
+      BinaryOperation( ADD )
+       Variable( x )
+       BinaryOperation( MULTIPLY )
+        Variable( y )
+        Variable( z )
+   Number( 10 )
+  Number( 20 )
+ Number( 30 )

@@ -1,0 +1,13 @@
+x=(y=20;2+y);y=20;x+y
+---
+Declaration ( x )
+ Declaration ( y )
+  Number( 20 )
+  BinaryOperation( ADD )
+   Number( 2 )
+   Variable( y )
+ Declaration ( y )
+  Number( 20 )
+  BinaryOperation( ADD )
+   Variable( x )
+   Variable( y )

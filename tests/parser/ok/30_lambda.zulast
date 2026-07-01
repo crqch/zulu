@@ -1,0 +1,8 @@
+[x;x*x+42]
+---
+Lambda ( x )
+ BinaryOperation( ADD )
+  BinaryOperation( MULTIPLY )
+   Variable( x )
+   Variable( x )
+  Number( 42 )

@@ -1,0 +1,10 @@
+[x y z;x + y * z]
+---
+Lambda ( x )
+ Lambda ( y )
+  Lambda ( z )
+   BinaryOperation( ADD )
+    Variable( x )
+    BinaryOperation( MULTIPLY )
+     Variable( y )
+     Variable( z )

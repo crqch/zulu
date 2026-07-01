@@ -1,0 +1,9 @@
+@x - y + !test + #test
+---
+BinaryOperation( ADD )
+ BinaryOperation( ADD )
+  BinaryOperation( SUBTRACT )
+   Variable( @x )
+   Variable( y )
+  Variable( !test )
+ Variable( #test )

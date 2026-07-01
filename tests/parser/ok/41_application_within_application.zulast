@@ -1,0 +1,13 @@
+[x;[x;x*2] x*x] 2
+---
+Application
+ Lambda ( x )
+  BinaryOperation( MULTIPLY )
+   Application
+    Lambda ( x )
+     BinaryOperation( MULTIPLY )
+      Variable( x )
+      Number( 2 )
+    Variable( x )
+   Variable( x )
+ Number( 2 )

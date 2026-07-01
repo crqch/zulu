@@ -1,0 +1,6 @@
+[x;x] 2
+---
+Application
+ Lambda ( x )
+  Variable( x )
+ Number( 2 )
