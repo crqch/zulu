@@ -2,9 +2,9 @@ const std = @import("std");
 const Io = std.Io;
 
 const zulu = @import("zulu");
-const Lexer = @import("./lexer.zig").Lexer;
-const Parser = @import("parser.zig").Parser;
-const AstPrinter = @import("ast.zig").AstPrinter;
+const Lexer = zulu.Lexer;
+const Parser = zulu.Parser;
+const AstPrinter = zulu.AstPrinter;
 
 pub const std_options: std.Options = .{
     .fmt_max_depth = 15, // Increase this to however deep your AST gets
@@ -35,8 +35,4 @@ pub fn main(init: std.process.Init) !void {
     const printedExpr = try AstPrinter.prettyPrint(arena, expr.*);
 
     try std.Io.File.stdout().writeStreamingAll(init.io, printedExpr);
-}
-
-test "run all tests" {
-    _ = @import("lexer.zig");
 }
