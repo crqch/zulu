@@ -262,7 +262,7 @@ pub const Parser = struct {
             };
         } else if (self.matchToken(.LPAR)) {
             expr = try self.declaration();
-            if (!self.matchToken(.RPAR)) return error.PARANTHESIS_UNMATCHED;
+            if (!self.matchToken(.RPAR)) return error.PARENTHESES_UNMATCHED;
         } else {
             return error.EXPECTED_EXPRESSION;
         }
