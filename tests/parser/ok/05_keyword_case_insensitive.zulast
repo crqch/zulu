@@ -1,0 +1,7 @@
+False + TRue + FALse
+---
+BinaryOperation( ADD )
+ BinaryOperation( ADD )
+  Boolean( False )
+  Boolean( True )
+ Boolean( False )

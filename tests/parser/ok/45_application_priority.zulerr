@@ -1,0 +1,10 @@
+f=[a;a+a] 2;x
+---
+Declaration ( f )
+ Application
+  Lambda ( a )
+   BinaryOperation( ADD )
+    Variable( a )
+    Variable( a )
+  Number( 2 )
+ Variable( x )
