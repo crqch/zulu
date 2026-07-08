@@ -16,7 +16,7 @@ pub const Parser = struct {
     }
 
     pub fn parse(self: *Parser) !*Expression {
-        const expr = self.declaration();
+        const expr = try self.declaration();
         if (!self.matchToken(.EOF)) return error.EOF_NOT_REACHED;
         return expr;
     }
@@ -70,7 +70,9 @@ pub const Parser = struct {
         const expr = try self.equality();
 
         if (self.matchToken(.SEMICOLON)) {
-            if (isEqualityWithVariableLeftNode(expr)) {
+            if (isEquality(expr)) {
+                const leftNode = try getBopLeftNode(expr);
+                if (leftNode.* != Expression.Variable) return error.EXPECTED_VARIABLE_AT_DECLARATION;
                 const ident = expr.BinaryOperation.left.Variable.identifier;
                 const expression = expr.BinaryOperation.right;
                 const block = try self.declaration();
@@ -300,12 +302,13 @@ pub const Parser = struct {
     }
 };
 
-fn isEqualityWithVariableLeftNode(expression: *Expression) bool {
-    if (expression.* == .BinaryOperation) {
-        if (expression.BinaryOperation.operation != Bop.EQ or expression.BinaryOperation.left.* != .Variable) return false;
-        return true;
-    }
-    return false;
+fn isEquality(expression: *Expression) bool {
+    return expression.* == .BinaryOperation and expression.BinaryOperation.operation == Bop.EQ;
+}
+
+fn getBopLeftNode(expression: *Expression) !*Expression {
+    if (expression.* != .BinaryOperation) return error.EXPECTED_BOP;
+    return expression.BinaryOperation.left;
 }
 
 fn bopOfToken(tp: TokenType) !Bop {
