@@ -263,6 +263,8 @@ pub const Parser = struct {
         } else if (self.matchToken(.LPAR)) {
             expr = try self.declaration();
             if (!self.matchToken(.RPAR)) return error.PARANTHESIS_UNMATCHED;
+        } else {
+            return error.EXPECTED_EXPRESSION;
         }
 
         return expr;
