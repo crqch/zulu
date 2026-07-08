@@ -31,8 +31,8 @@ pub const Testing = struct {
     }
 
     pub fn runTests(self: *Testing) !void {
-        std.log.info("\nRunning OK tests...\n", .{});
-        const okTests = try self.runOkTests();
+        std.log.info("\nRunning PASS tests...\n", .{});
+        const passTests = try self.runPassTests();
         std.log.info("\nRunning FAIL tests...\n", .{});
         const failTests = try self.runFailTests();
 
@@ -41,12 +41,12 @@ pub const Testing = struct {
             .pass = 0,
         };
 
-        allTests.add(okTests);
+        allTests.add(passTests);
         allTests.add(failTests);
 
-        std.log.info("\nSummary of tests\nClass\tpassed\tfailed\nOK\t{d}\t{d}\nFAIL\t{d}\t{d}\nALL\t{d}\t{d}", .{
-            okTests.pass,
-            okTests.fail,
+        std.log.info("\nSummary of tests\nClass\tpassed\tfailed\nPASS\t{d}\t{d}\nFAIL\t{d}\t{d}\nALL\t{d}\t{d}", .{
+            passTests.pass,
+            passTests.fail,
 
             failTests.pass,
             failTests.fail,
@@ -56,13 +56,13 @@ pub const Testing = struct {
         });
     }
 
-    fn runOkTests(self: *Testing) !TestsStats {
+    fn runPassTests(self: *Testing) !TestsStats {
         var stats = TestsStats{
             .fail = 0,
             .pass = 0,
         };
 
-        var path = try std.fmt.allocPrint(self.allocator, "tests/parser/ok", .{});
+        var path = try std.fmt.allocPrint(self.allocator, "tests/parser/pass", .{});
 
         var dir = try std.Io.Dir.cwd().openDir(self.io, path, .{ .iterate = true });
         defer dir.close(self.io);
@@ -88,7 +88,7 @@ pub const Testing = struct {
                 .file => {
                     const filePath = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ path, entry.name });
 
-                    switch (try self.runOkTest(filePath)) {
+                    switch (try self.runPassTest(filePath)) {
                         .pass => stats.pass += 1,
                         .fail => stats.fail += 1,
                     }
@@ -114,7 +114,7 @@ pub const Testing = struct {
         return contents;
     }
 
-    fn runOkTest(self: *Testing, filePath: []const u8) !TestStatus {
+    fn runPassTest(self: *Testing, filePath: []const u8) !TestStatus {
         errdefer std.log.debug("Evaluating test {s}", .{filePath});
         const fileContent = try self.readFileContents(filePath);
         errdefer std.log.debug("Content of the test:\n{s}", .{fileContent});
