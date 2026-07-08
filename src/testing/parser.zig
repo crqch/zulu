@@ -31,8 +31,29 @@ pub const Testing = struct {
     }
 
     pub fn runTests(self: *Testing) !void {
-        var stats = try self.runOkTests();
-        stats.add(try self.runFailTests());
+        std.log.info("\nRunning OK tests...\n", .{});
+        const okTests = try self.runOkTests();
+        std.log.info("\nRunning FAIL tests...\n", .{});
+        const failTests = try self.runFailTests();
+
+        var allTests = TestsStats{
+            .fail = 0,
+            .pass = 0,
+        };
+
+        allTests.add(okTests);
+        allTests.add(failTests);
+
+        std.log.info("\nSummary of tests\nClass\tpassed\tfailed\nOK\t{d}\t{d}\nFAIL\t{d}\t{d}\nALL\t{d}\t{d}", .{
+            okTests.pass,
+            okTests.fail,
+
+            failTests.pass,
+            failTests.fail,
+
+            allTests.pass,
+            allTests.fail,
+        });
     }
 
     fn runOkTests(self: *Testing) !TestsStats {
@@ -130,14 +151,95 @@ pub const Testing = struct {
     }
 
     fn runFailTests(self: *Testing) !TestsStats {
-        const stats = TestsStats{
+        var stats = TestsStats{
             .fail = 0,
             .pass = 0,
         };
 
-        var dir = try std.Io.Dir.cwd().openDir(self.io, "tests/parser", .{ .iterate = true });
+        var path = try std.fmt.allocPrint(self.allocator, "tests/parser/fail", .{});
+
+        var dir = try std.Io.Dir.cwd().openDir(self.io, path, .{ .iterate = true });
         defer dir.close(self.io);
 
+        var dir_iterator = dir.iterate();
+
+        while (try dir_iterator.next(self.io)) |entry| {
+            switch (entry.kind) {
+                .directory => {
+                    const savedIterator = dir_iterator;
+                    const savedPath = path;
+
+                    path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ savedPath, entry.name });
+
+                    dir = try std.Io.Dir.cwd().openDir(self.io, path, .{ .iterate = true });
+
+                    dir_iterator = dir.iterate();
+
+                    path = savedPath;
+
+                    dir_iterator = savedIterator;
+                },
+                .file => {
+                    const filePath = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ path, entry.name });
+
+                    switch (try self.runFailTest(filePath)) {
+                        .pass => stats.pass += 1,
+                        .fail => stats.fail += 1,
+                    }
+
+                    self.allocator.free(filePath);
+                },
+                else => {},
+            }
+        }
+
         return stats;
+    }
+
+    fn runFailTest(self: *Testing, filePath: []const u8) !TestStatus {
+        errdefer std.log.debug("Evaluating test {s}", .{filePath});
+        const fileContent = try self.readFileContents(filePath);
+        errdefer std.log.debug("Content of the test:\n{s}", .{fileContent});
+
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const testAllocator = arena.allocator();
+
+        var iterator = std.mem.splitSequence(u8, fileContent, "---");
+        const content = iterator.next() orelse return error.NO_CONTENT;
+        errdefer std.log.debug("Evaluating content:\n{s}", .{content});
+
+        var lexer = try Lexer.init(testAllocator, content);
+        const tokens = try lexer.scanTokens();
+
+        var parser = Parser.init(testAllocator, tokens);
+        const expectedError = iterator.next() orelse return error.NO_EXPECTED_ERROR_CODE;
+
+        const trimmedError = std.mem.trim(u8, expectedError, " \n");
+
+        const expr = parser.parse() catch |err| {
+            if (std.mem.eql(u8, @errorName(err), trimmedError)) {
+                std.log.info("[+] {s}", .{filePath});
+                return .pass;
+            } else {
+                std.log.err("[-] {s}\n\tGot error:\n{s}\n\n\tExpected error:\n{s}", .{
+                    filePath,
+                    @errorName(err),
+                    trimmedError,
+                });
+                return .fail;
+            }
+        };
+
+        const parsedAst = try AstPrinter.prettyPrint(testAllocator, expr.*);
+        const trimmedParsedAst = std.mem.trim(u8, parsedAst, " \n");
+
+        std.log.err("[-] {s}\n\tGot ast:\n{s}\n\n\tExpected error:\n{s}", .{
+            filePath,
+            trimmedParsedAst,
+            trimmedError,
+        });
+
+        return .fail;
     }
 };
