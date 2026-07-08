@@ -135,12 +135,30 @@ pub fn build(b: *std.Build) void {
     // A run step that will run the second test executable.
     const run_exe_tests = b.addRunArtifact(exe_tests);
 
+    const test_runner = b.addExecutable(.{
+        .name = "test_runner",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("./src/testing/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zulu", .module = mod },
+            },
+        }),
+    });
+
+    const run_test_runner = b.addRunArtifact(test_runner);
+    if (b.args) |args| {
+        run_test_runner.addArgs(args);
+    }
+
     // A top level step for running all tests. dependOn can be called multiple
     // times and since the two run steps do not depend on one another, this will
     // make the two of them run in parallel.
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+    test_step.dependOn(&run_test_runner.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
