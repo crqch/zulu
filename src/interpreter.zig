@@ -108,6 +108,12 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 .Boolean = boolean.value,
             };
         },
+        .Variable => |variable| {
+            if (environment.get(variable.identifier)) |value| {
+                return value;
+            }
+            return InterpreterError.UNBOUND_VARIABLE;
+        },
         .BinaryOperation => |bop| {
             var left = try self._eval(bop.left, environment);
             var right = try self._eval(bop.right, environment);
@@ -211,6 +217,7 @@ const InterpreterError = error{
     INT_PARSING_FAILED,
     MEMORY_ALLOCATION_FAILED,
     DIVISION_BY_ZERO,
+    UNBOUND_VARIABLE,
 
     UNIMPLEMENTED,
 };
