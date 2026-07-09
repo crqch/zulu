@@ -153,6 +153,17 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
 
             return try self._eval(closure.node.Lambda.block, closureEnvironment);
         },
+        .Condition => |condition| {
+            const conditionExpression = try self._eval(condition.expression, environment);
+
+            if (conditionExpression != .Boolean) return InterpreterError.UNEXPECTED_TYPE;
+
+            if (conditionExpression.Boolean) {
+                return try self._eval(condition.satisfyBlock, environment);
+            } else {
+                return try self._eval(condition.elseBlock, environment);
+            }
+        },
         .BinaryOperation => |bop| {
             var left = try self._eval(bop.left, environment);
             var right = try self._eval(bop.right, environment);

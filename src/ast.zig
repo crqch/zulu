@@ -45,6 +45,11 @@ pub const Expression = union(enum) {
         callee: *Expression,
         value: *Expression,
     },
+    Condition: struct {
+        expression: *Expression,
+        satisfyBlock: *Expression,
+        elseBlock: *Expression,
+    },
 };
 
 pub const AstPrinter = struct {
@@ -108,6 +113,13 @@ pub const AstPrinter = struct {
                 try self.printNode(bop.left.*, level + 1);
 
                 try self.printNode(bop.right.*, level + 1);
+            },
+            .Condition => |condition| {
+                try self.buffer.print(self.allocator, "Condition\n", .{});
+
+                try self.printNode(condition.expression.*, level + 1);
+                try self.printNode(condition.satisfyBlock.*, level + 1);
+                try self.printNode(condition.elseBlock.*, level + 1);
             },
         }
     }

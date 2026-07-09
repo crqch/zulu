@@ -33,7 +33,7 @@ pub fn main(init: std.process.Init) !void {
     var parser = Parser.init(arena, tokens);
     const expression = try parser.parse();
 
-    // const printedExpr = try AstPrinter.prettyPrint(arena, expr.*);
+    // const printedExpr = try AstPrinter.prettyPrint(arena, expression.*);
 
     // try std.Io.File.stdout().writeStreamingAll(init.io, printedExpr);
 

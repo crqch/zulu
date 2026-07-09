@@ -67,7 +67,7 @@ pub const Parser = struct {
     }
 
     fn declaration(self: *Parser) anyerror!*Expression {
-        const expr = try self.equality();
+        const expr = try self.ifElse();
 
         if (self.matchToken(.SEMICOLON)) {
             if (isEquality(expr)) {
@@ -88,6 +88,31 @@ pub const Parser = struct {
         }
 
         return expr;
+    }
+
+    fn ifElse(self: *Parser) anyerror!*Expression {
+        if (self.matchToken(.KW_IF)) {
+            if (!self.matchToken(.LPAR)) return error.EXPECTED_LEFT_PARENTHESES;
+            const expression = try self.equality();
+            if (!self.matchToken(.RPAR)) return error.EXPECTED_RIGHT_PARENTHESES;
+            const satisfyBlock = try self.equality();
+            if (!self.matchToken(.KW_ELSE)) return error.EXPECTED_ELSE_KEYWORD;
+            const elseBlock = try self.equality();
+
+            const fresh = try self.freshExpression();
+
+            fresh.* = Expression{
+                .Condition = .{
+                    .expression = expression,
+                    .satisfyBlock = satisfyBlock,
+                    .elseBlock = elseBlock,
+                },
+            };
+
+            return fresh;
+        }
+
+        return try self.equality();
     }
 
     fn equality(self: *Parser) anyerror!*Expression {
