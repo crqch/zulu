@@ -201,7 +201,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 },
             };
         },
-        else => return error.UNIMPLEMENTED,
+        else => return InterpreterError.UNIMPLEMENTED,
     }
 }
 
