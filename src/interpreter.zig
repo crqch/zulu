@@ -319,8 +319,18 @@ fn castType(val1: *Value, val2: *Value) InterpreterError!void {
 
 fn numericOperation(comptime T: type, left: T, right: T, operation: Bop) InterpreterError!T {
     return switch (operation) {
-        .ADD => left + right,
-        .SUBTRACT => left - right,
+        .ADD => {
+            if (T == i64) {
+                return left +| right;
+            }
+            return left + right;
+        },
+        .SUBTRACT => {
+            if (T == i64) {
+                return left -| right;
+            }
+            return left - right;
+        },
         .DIVIDE => {
             if (right == 0) return InterpreterError.DIVISION_BY_ZERO;
             if (T == i64) {
@@ -328,7 +338,12 @@ fn numericOperation(comptime T: type, left: T, right: T, operation: Bop) Interpr
             }
             return left / right;
         },
-        .MULTIPLY => left * right,
+        .MULTIPLY => {
+            if (T == i64) {
+                return left *| right;
+            }
+            return left * right;
+        },
         else => unreachable,
     };
 }
