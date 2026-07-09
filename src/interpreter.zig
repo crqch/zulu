@@ -50,6 +50,7 @@ const ValueType = enum {
     Float,
     Boolean,
     String,
+    Closure,
 };
 
 const Value = union(ValueType) {
@@ -57,6 +58,10 @@ const Value = union(ValueType) {
     Float: f64,
     Boolean: bool,
     String: []const u8,
+    Closure: struct {
+        node: *Expression,
+        env: *Env,
+    },
 };
 
 pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
@@ -65,6 +70,7 @@ pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
         .Float => try std.fmt.allocPrint(allocator, "{d}", .{value.Float}),
         .Integer => try std.fmt.allocPrint(allocator, "{d}", .{value.Integer}),
         .String => try std.fmt.allocPrint(allocator, "{s}", .{value.String}),
+        .Closure => try std.fmt.allocPrint(allocator, "[lambda]", .{}),
     };
 }
 
@@ -114,6 +120,14 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             }
             return InterpreterError.UNBOUND_VARIABLE;
         },
+        .Lambda => {
+            return Value{
+                .Closure = .{
+                    .node = expression,
+                    .env = environment,
+                },
+            };
+        },
         .BinaryOperation => |bop| {
             var left = try self._eval(bop.left, environment);
             var right = try self._eval(bop.right, environment);
@@ -159,6 +173,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
 
                             return Value{ .Boolean = eql };
                         },
+                        else => return InterpreterError.UNEXPECTED_TYPE,
                     }
                 },
                 Bop.EQEQ => {
@@ -193,6 +208,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
 
                             return Value{ .Boolean = eql };
                         },
+                        else => return InterpreterError.UNEXPECTED_TYPE,
                     }
                 },
                 Bop.GT, Bop.GTEQ, Bop.LT, Bop.LTEQ => {
