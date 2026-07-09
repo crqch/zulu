@@ -133,9 +133,10 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             };
         },
         .Declaration => |declaration| {
-            const evaluatedExpression = try self._eval(declaration.expression, environment);
-
             var blockEnvironment = try Env.init(self.allocator, environment);
+
+            const evaluatedExpression = try self._eval(declaration.expression, if (declaration.identifier[0] == '@') blockEnvironment else environment);
+
             try blockEnvironment.add(declaration.identifier, evaluatedExpression);
 
             return try self._eval(declaration.block, blockEnvironment);
