@@ -136,6 +136,42 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                         ValueType.Integer => {
                             try assertType(&[_]Value{right}, &[_]ValueType{ .Float, .Integer });
                             try castType(&left, &right);
+                            if (left == .Integer) return Value{
+                                .Boolean = left.Integer == right.Integer,
+                            } else return Value{
+                                .Boolean = left.Float == right.Float,
+                            };
+                        },
+                        ValueType.String => {
+                            try assertType(&[_]Value{right}, &[_]ValueType{.String});
+                            const eql = std.mem.eql(u8, left.String, right.String);
+
+                            return Value{ .Boolean = eql };
+                        },
+                    }
+                },
+                Bop.EQEQ => {
+                    switch (left) {
+                        ValueType.Boolean => {
+                            try assertType(&[_]Value{right}, &[_]ValueType{.Boolean});
+                            return Value{
+                                .Boolean = left.Boolean == right.Boolean,
+                            };
+                        },
+                        ValueType.Float => {
+                            try assertType(&[_]Value{right}, &[_]ValueType{ .Integer, .Float });
+                            if (right != .Float) return Value{
+                                .Boolean = false,
+                            };
+                            return Value{
+                                .Boolean = left.Float == right.Float,
+                            };
+                        },
+                        ValueType.Integer => {
+                            try assertType(&[_]Value{right}, &[_]ValueType{ .Integer, .Float });
+                            if (right != .Integer) return Value{
+                                .Boolean = false,
+                            };
                             return Value{
                                 .Boolean = left.Integer == right.Integer,
                             };
