@@ -302,13 +302,9 @@ pub const Parser = struct {
             expr.* = Expression{
                 .Variable = token.lexeme,
             };
-        } else if (self.matchToken(.KW_TRUE)) {
+        } else if (self.matchToken(.KW_TRUE) or self.matchToken(.KW_FALSE)) {
             expr.* = Expression{
-                .Boolean = true,
-            };
-        } else if (self.matchToken(.KW_FALSE)) {
-            expr.* = Expression{
-                .Boolean = false,
+                .Boolean = token.type == .KW_TRUE,
             };
         } else if (self.matchToken(.LPAR)) {
             expr = try self.declaration();
