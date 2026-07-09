@@ -281,6 +281,8 @@ pub const Parser = struct {
                 expr.* = Expression{
                     .Number = try std.fmt.allocPrint(self.allocator, "-{s}", .{num.lexeme}),
                 };
+            } else {
+                return error.EXPECTED_EXPRESSION;
             }
         } else if (self.matchToken(.BANG)) {
             const rest = try self.primary();
