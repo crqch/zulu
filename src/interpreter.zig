@@ -103,6 +103,11 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 .String = str.value,
             };
         },
+        .Boolean => |boolean| {
+            return Value{
+                .Boolean = boolean.value,
+            };
+        },
         .BinaryOperation => |bop| {
             var left = try self._eval(bop.left, environment);
             var right = try self._eval(bop.right, environment);
