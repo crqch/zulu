@@ -230,7 +230,16 @@ pub const Parser = struct {
     fn primary(self: *Parser) anyerror!*Expression {
         var expr = try self.freshExpression();
         const token = self.tokens[self.current];
-        if (self.matchToken(.NUMBER)) {
+        if (self.matchToken(.MINUS)) {
+            if (self.matchToken(.NUMBER)) {
+                const num = self.previousToken();
+                expr.* = Expression{
+                    .Number = .{
+                        .value = try std.fmt.allocPrint(self.allocator, "-{s}", .{num.lexeme}),
+                    },
+                };
+            }
+        } else if (self.matchToken(.NUMBER)) {
             expr.* = Expression{
                 .Number = .{
                     .value = token.lexeme,
