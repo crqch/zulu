@@ -26,6 +26,9 @@ pub const TokenType = enum {
     NUMBER,
     STRING,
 
+    KW_AND,
+    KW_OR,
+
     KW_TRUE,
     KW_FALSE,
     KW_IF,
@@ -43,6 +46,8 @@ const keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "false", .KW_FALSE },
     .{ "if", .KW_IF },
     .{ "else", .KW_ELSE },
+    .{ "and", .KW_AND },
+    .{ "or", .KW_OR },
 });
 
 pub const Lexer = struct {

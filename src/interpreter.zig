@@ -258,6 +258,15 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                         else => unreachable,
                     };
                 },
+                Bop.AND, Bop.OR => {
+                    try assertType(&[_]Value{ left, right }, &[_]ValueType{.Boolean});
+
+                    return switch (bop.operation) {
+                        Bop.AND => Value{ .Boolean = left.Boolean and right.Boolean },
+                        Bop.OR => Value{ .Boolean = left.Boolean or right.Boolean },
+                        else => unreachable,
+                    };
+                },
             };
         },
     }

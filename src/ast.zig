@@ -12,6 +12,9 @@ pub const Bop = enum {
     LTEQ,
     GTEQ,
     EQEQ,
+
+    OR,
+    AND,
 };
 
 pub const Expression = union(enum) {

@@ -93,11 +93,11 @@ pub const Parser = struct {
     fn ifElse(self: *Parser) anyerror!*Expression {
         if (self.matchToken(.KW_IF)) {
             if (!self.matchToken(.LPAR)) return error.EXPECTED_LEFT_PARENTHESES;
-            const expression = try self.equality();
+            const expression = try self.logical();
             if (!self.matchToken(.RPAR)) return error.EXPECTED_RIGHT_PARENTHESES;
-            const satisfyBlock = try self.equality();
+            const satisfyBlock = try self.logical();
             if (!self.matchToken(.KW_ELSE)) return error.EXPECTED_ELSE_KEYWORD;
-            const elseBlock = try self.equality();
+            const elseBlock = try self.logical();
 
             const fresh = try self.freshExpression();
 
@@ -112,7 +112,27 @@ pub const Parser = struct {
             return fresh;
         }
 
-        return try self.equality();
+        return try self.logical();
+    }
+
+    fn logical(self: *Parser) anyerror!*Expression {
+        var left = try self.equality();
+
+        while (self.matchToken(.KW_AND) or self.matchToken(.KW_OR)) {
+            const previous = self.previousToken().type;
+            const bop = try bopOfToken(previous);
+
+            const right = try self.equality();
+            const fresh = try self.freshExpression();
+            fresh.* = Expression{ .BinaryOperation = .{
+                .left = left,
+                .operation = bop,
+                .right = right,
+            } };
+
+            left = fresh;
+        }
+        return left;
     }
 
     fn equality(self: *Parser) anyerror!*Expression {
@@ -357,6 +377,8 @@ fn bopOfToken(tp: TokenType) !Bop {
         .MINUS => Bop.SUBTRACT,
         .ASTERISK => Bop.MULTIPLY,
         .SLASH => Bop.DIVIDE,
+        .KW_AND => Bop.AND,
+        .KW_OR => Bop.OR,
         else => return error.NOT_A_BINARY_OPERATION,
     };
 }
