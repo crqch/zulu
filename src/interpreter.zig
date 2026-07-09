@@ -61,7 +61,7 @@ const Value = union(ValueType) {
 pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
     return switch (value) {
         .Boolean => if (value.Boolean) "true" else "false",
-        .Float => try std.fmt.allocPrint(allocator, "{d:.18}", .{value.Float}),
+        .Float => try std.fmt.allocPrint(allocator, "{d}", .{value.Float}),
         .Integer => try std.fmt.allocPrint(allocator, "{d}", .{value.Integer}),
         .String => try std.fmt.allocPrint(allocator, "{s}", .{value.String}),
     };
@@ -98,26 +98,19 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             return Value{ .Integer = int };
         },
         .BinaryOperation => |bop| {
-            const left = try self._eval(bop.left, environment);
-            const right = try self._eval(bop.right, environment);
+            var left = try self._eval(bop.left, environment);
+            var right = try self._eval(bop.right, environment);
 
             return switch (bop.operation) {
                 .ADD => {
                     try assertType(&[_]Value{ left, right }, &[_]ValueType{ .Integer, .Float });
+                    try castType(&left, &right);
 
-                    switch (left) {
-                        .Integer => |l_val| switch (right) {
-                            .Integer => |r_val| return Value{ .Integer = l_val + r_val },
-                            .Float => |r_val| return Value{ .Float = @as(f64, @floatFromInt(l_val)) + r_val },
-                            else => return InterpreterError.UNEXPECTED_TYPE,
-                        },
-                        .Float => |l_val| switch (right) {
-                            .Integer => |r_val| return Value{ .Float = l_val + @as(f64, @floatFromInt(r_val)) },
-                            .Float => |r_val| return Value{ .Float = l_val + r_val },
-                            else => return InterpreterError.UNEXPECTED_TYPE,
-                        },
-                        else => return InterpreterError.UNEXPECTED_TYPE,
-                    }
+                    return switch (left) {
+                        .Integer => Value{ .Integer = left.Integer + right.Integer },
+                        .Float => Value{ .Float = left.Float + left.Float },
+                        else => unreachable,
+                    };
                 },
                 else => return InterpreterError.UNIMPLEMENTED,
             };
@@ -151,5 +144,27 @@ fn assertType(values: []const Value, valueTypes: []const ValueType) InterpreterE
         if (!is_valid) {
             return InterpreterError.UNEXPECTED_TYPE;
         }
+    }
+}
+
+fn castType(val1: *Value, val2: *Value) InterpreterError!void {
+    switch (val1.*) {
+        .Integer => |val_1| switch (val2.*) {
+            .Integer => return,
+            .Float => {
+                val1.* = Value{
+                    .Float = @as(f64, @floatFromInt(val_1)),
+                };
+            },
+            else => unreachable,
+        },
+        .Float => switch (val2.*) {
+            .Integer => |val_2| {
+                val2.* = Value{ .Float = @as(f64, @floatFromInt(val_2)) };
+            },
+            .Float => return,
+            else => unreachable,
+        },
+        else => unreachable,
     }
 }
