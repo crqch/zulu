@@ -1,6 +1,7 @@
 const std = @import("std");
 const Interpreter = @This();
 const Expression = @import("./ast.zig").Expression;
+const Bop = @import("./ast.zig").Bop;
 
 allocator: std.mem.Allocator,
 
@@ -52,7 +53,7 @@ const ValueType = enum {
 };
 
 const Value = union(ValueType) {
-    Integer: i32,
+    Integer: i64,
     Float: f64,
     Boolean: bool,
     String: []const u8,
@@ -102,13 +103,13 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             var right = try self._eval(bop.right, environment);
 
             return switch (bop.operation) {
-                .ADD => {
+                .ADD, .SUBTRACT, .DIVIDE, .MULTIPLY => {
                     try assertType(&[_]Value{ left, right }, &[_]ValueType{ .Integer, .Float });
                     try castType(&left, &right);
 
                     return switch (left) {
-                        .Integer => Value{ .Integer = left.Integer + right.Integer },
-                        .Float => Value{ .Float = left.Float + left.Float },
+                        .Integer => Value{ .Integer = try numericOperation(i64, left.Integer, right.Integer, bop.operation) },
+                        .Float => Value{ .Float = try numericOperation(f64, left.Float, right.Float, bop.operation) },
                         else => unreachable,
                     };
                 },
@@ -124,6 +125,7 @@ const InterpreterError = error{
     FLOAT_PARSING_FAILED,
     INT_PARSING_FAILED,
     MEMORY_ALLOCATION_FAILED,
+    DIVISION_BY_ZERO,
 
     UNIMPLEMENTED,
 };
@@ -167,4 +169,20 @@ fn castType(val1: *Value, val2: *Value) InterpreterError!void {
         },
         else => unreachable,
     }
+}
+
+fn numericOperation(comptime T: type, left: T, right: T, operation: Bop) InterpreterError!T {
+    return switch (operation) {
+        .ADD => left + right,
+        .SUBTRACT => left - right,
+        .DIVIDE => {
+            if (right == 0) return InterpreterError.DIVISION_BY_ZERO;
+            if (T == i64) {
+                return @divFloor(left, right);
+            }
+            return left / right;
+        },
+        .MULTIPLY => left * right,
+        else => unreachable,
+    };
 }
