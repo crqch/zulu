@@ -138,7 +138,7 @@ pub const Parser = struct {
     fn equality(self: *Parser) anyerror!*Expression {
         var left = try self.comparison();
 
-        while (self.matchToken(.EQEQ) or self.matchToken(.EQ)) {
+        while (self.matchToken(.EQEQ) or self.matchToken(.EQ) or self.matchToken(.NOTEQ) or self.matchToken(.NOTEQEQ)) {
             const previous = self.previousToken().type;
 
             const right = try self.comparison();
@@ -284,6 +284,14 @@ pub const Parser = struct {
                     },
                 };
             }
+        } else if (self.matchToken(.BANG)) {
+            const rest = try self.primary();
+
+            expr.* = Expression{
+                .Not = .{
+                    .expression = rest,
+                },
+            };
         } else if (self.matchToken(.NUMBER)) {
             expr.* = Expression{
                 .Number = .{
@@ -369,6 +377,8 @@ fn bopOfToken(tp: TokenType) !Bop {
     return switch (tp) {
         .EQ => Bop.EQ,
         .EQEQ => Bop.EQEQ,
+        .NOTEQ => Bop.NOTEQ,
+        .NOTEQEQ => Bop.NOTEQEQ,
         .GT => Bop.GT,
         .GTEQ => Bop.GTEQ,
         .LT => Bop.LT,

@@ -132,6 +132,15 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 },
             };
         },
+        .Not => |not| {
+            const notValue = try self._eval(not.expression, environment);
+
+            if (notValue != .Boolean) return InterpreterError.UNEXPECTED_TYPE;
+
+            return Value{
+                .Boolean = !notValue.Boolean,
+            };
+        },
         .Declaration => |declaration| {
             var blockEnvironment = try Env.init(self.allocator, environment);
 
@@ -178,6 +187,24 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                         .Integer => Value{ .Integer = try numericOperation(i64, left.Integer, right.Integer, bop.operation) },
                         .Float => Value{ .Float = try numericOperation(f64, left.Float, right.Float, bop.operation) },
                         else => unreachable,
+                    };
+                },
+                Bop.NOTEQ => {
+                    expression.*.BinaryOperation.operation = Bop.EQ;
+
+                    const negatedValue = try self._eval(expression, environment);
+
+                    return Value{
+                        .Boolean = !negatedValue.Boolean,
+                    };
+                },
+                Bop.NOTEQEQ => {
+                    expression.*.BinaryOperation.operation = Bop.EQEQ;
+
+                    const negatedValue = try self._eval(expression, environment);
+
+                    return Value{
+                        .Boolean = !negatedValue.Boolean,
                     };
                 },
                 Bop.EQ => {

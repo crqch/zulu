@@ -7,11 +7,13 @@ pub const Bop = enum {
     DIVIDE,
 
     EQ,
+    NOTEQ,
     LT,
     GT,
     LTEQ,
     GTEQ,
     EQEQ,
+    NOTEQEQ,
 
     OR,
     AND,
@@ -22,6 +24,9 @@ pub const Expression = union(enum) {
         operation: Bop,
         left: *Expression,
         right: *Expression,
+    },
+    Not: struct {
+        expression: *Expression,
     },
     Variable: struct {
         identifier: []const u8,

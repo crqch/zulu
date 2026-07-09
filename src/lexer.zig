@@ -7,13 +7,16 @@ pub const TokenType = enum {
     SLASH,
     ASTERISK,
     DOT,
+    NOTEQ,
     EQ,
     GT,
     LT,
+    BANG,
     SEMICOLON,
 
     GTEQ,
     LTEQ,
+    NOTEQEQ,
     EQEQ,
     SLASHSLASH,
 
@@ -82,7 +85,7 @@ pub const Lexer = struct {
     fn scanToken(self: *Lexer) !void {
         const char = self.advance();
         switch (char) {
-            '+', '-', '/', '*', '=', '(', ')', '[', ']', ';', '>', '<' => {
+            '+', '-', '/', '*', '=', '!', '(', ')', '[', ']', ';', '>', '<' => {
                 return try self.addToken(switch (char) {
                     '+' => .PLUS,
                     '-' => .MINUS,
@@ -91,6 +94,10 @@ pub const Lexer = struct {
                     '>' => if (self.match('=')) .GTEQ else .GT,
                     '<' => if (self.match('=')) .LTEQ else .LT,
                     '=' => if (self.match('=')) .EQEQ else .EQ,
+                    '!' => if (self.match('='))
+                        (if (self.match('=')) .NOTEQEQ else .NOTEQ)
+                    else
+                        .BANG,
                     '(' => .LPAR,
                     ')' => .RPAR,
                     '[' => .LBRA,
