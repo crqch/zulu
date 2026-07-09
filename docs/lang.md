@@ -12,9 +12,9 @@ Zulu is a statically typed, globally inferred functional language.
     `IDENT, NUMBER, STRING`
 
   - Identifiers
-    - Need to start from a [letter;_;@;!]
+    - Need to start from a [letter;_;@]
     - Can include digits
-    - Can include -, _, #, @, !
+    - Can include -, _, #, @
     - _ is treated as a wildcard
 
   - Numbers

@@ -119,6 +119,11 @@ pub const AstPrinter = struct {
                 try self.printNode(condition.satisfyBlock.*, level + 1);
                 try self.printNode(condition.elseBlock.*, level + 1);
             },
+            .Not => |not| {
+                try self.buffer.print(self.allocator, "Not\n", .{});
+
+                try self.printNode(not.*, level + 1);
+            },
         }
     }
 };

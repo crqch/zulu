@@ -5,5 +5,6 @@ BinaryOperation( ADD )
   BinaryOperation( SUBTRACT )
    Variable( @x )
    Variable( y )
-  Variable( !test )
+  Not
+   Variable( test )
  Variable( #test )

@@ -203,7 +203,7 @@ pub const Lexer = struct {
 };
 
 fn isValidIdentChar(char: u8) bool {
-    return (std.ascii.isAlphabetic(char) or char == '@' or char == '!' or char == '#' or char == '_');
+    return (std.ascii.isAlphabetic(char) or char == '@' or char == '#' or char == '_');
 }
 
 fn lowerOfString(allocator: std.mem.Allocator, str: []const u8) ![]u8 {
@@ -376,15 +376,16 @@ test "lexer - string literals" {
 test "lexer - identifiers and keywords" {
     var tsting = Testing.init(&[_]Testing.TestCase{
         .{
-            .source = "test @x _x !x #x x#test x!@##",
+            .source = "test @x _x !x #x x#test x@##",
             .expected = &.{
                 .{ .type = .IDENT, .lexeme = "test" },
                 .{ .type = .IDENT, .lexeme = "@x" },
                 .{ .type = .IDENT, .lexeme = "_x" },
-                .{ .type = .IDENT, .lexeme = "!x" },
+                .{ .type = .BANG, .lexeme = "!" },
+                .{ .type = .IDENT, .lexeme = "x" },
                 .{ .type = .IDENT, .lexeme = "#x" },
                 .{ .type = .IDENT, .lexeme = "x#test" },
-                .{ .type = .IDENT, .lexeme = "x!@##" },
+                .{ .type = .IDENT, .lexeme = "x@##" },
                 .{ .type = .EOF, .lexeme = "" },
             },
         },
