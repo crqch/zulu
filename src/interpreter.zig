@@ -132,6 +132,14 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 },
             };
         },
+        .Declaration => |declaration| {
+            const evaluatedExpression = try self._eval(declaration.expression, environment);
+
+            var blockEnvironment = try Env.init(self.allocator, environment);
+            try blockEnvironment.add(declaration.identifier, evaluatedExpression);
+
+            return try self._eval(declaration.block, blockEnvironment);
+        },
         .BinaryOperation => |bop| {
             var left = try self._eval(bop.left, environment);
             var right = try self._eval(bop.right, environment);
@@ -238,6 +246,8 @@ const InterpreterError = error{
     MEMORY_ALLOCATION_FAILED,
     DIVISION_BY_ZERO,
     UNBOUND_VARIABLE,
+    ENVIRONMENT_MAP_ERROR,
+    ENVIRONMENT_INITALIZATION_ERROR,
 
     UNIMPLEMENTED,
 };
