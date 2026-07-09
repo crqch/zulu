@@ -140,6 +140,19 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
 
             return try self._eval(declaration.block, blockEnvironment);
         },
+        .Application => |application| {
+            const evaluatedCallee = try self._eval(application.callee, environment);
+            const evaluatedValue = try self._eval(application.value, environment);
+
+            if (evaluatedCallee != .Closure) return InterpreterError.UNEXPECTED_TYPE;
+
+            const closure = evaluatedCallee.Closure;
+            const closureEnvironment = try Env.init(self.allocator, closure.env);
+
+            try closureEnvironment.add(closure.node.Lambda.identifier, evaluatedValue);
+
+            return try self._eval(closure.node.Lambda.block, closureEnvironment);
+        },
         .BinaryOperation => |bop| {
             var left = try self._eval(bop.left, environment);
             var right = try self._eval(bop.right, environment);
@@ -235,7 +248,6 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 },
             };
         },
-        else => return InterpreterError.UNIMPLEMENTED,
     }
 }
 
