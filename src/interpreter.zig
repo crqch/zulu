@@ -17,7 +17,9 @@ const Env = struct {
     bindings: std.StringHashMap(Value),
 
     pub fn init(allocator: std.mem.Allocator, parent: ?*Env) !*Env {
-        const env = try allocator.create(Env);
+        const env = allocator.create(Env) catch {
+            return InterpreterError.ENVIRONMENT_INITALIZATION_ERROR;
+        };
 
         env.* = Env{
             .allocator = allocator,
@@ -29,7 +31,9 @@ const Env = struct {
     }
 
     fn add(self: *Env, identifier: []const u8, value: Value) !void {
-        try self.bindings.put(identifier, value);
+        self.bindings.put(identifier, value) catch {
+            return InterpreterError.ENVIRONMENT_MAP_ERROR;
+        };
     }
 
     fn get(self: *Env, identifier: []const u8) ?Value {
