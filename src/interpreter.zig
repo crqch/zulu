@@ -98,6 +98,11 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             };
             return Value{ .Integer = int };
         },
+        .String => |str| {
+            return Value{
+                .String = str.value,
+            };
+        },
         .BinaryOperation => |bop| {
             var left = try self._eval(bop.left, environment);
             var right = try self._eval(bop.right, environment);
