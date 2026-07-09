@@ -103,7 +103,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             var right = try self._eval(bop.right, environment);
 
             return switch (bop.operation) {
-                .ADD, .SUBTRACT, .DIVIDE, .MULTIPLY => {
+                Bop.ADD, Bop.SUBTRACT, Bop.DIVIDE, Bop.MULTIPLY => {
                     try assertType(&[_]Value{ left, right }, &[_]ValueType{ .Integer, .Float });
                     try castType(&left, &right);
 
