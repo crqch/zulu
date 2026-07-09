@@ -87,9 +87,11 @@ fn run(init: std.process.Init) anyerror!void {
             error.UNMATCHED_TOKEN => {
                 const char = if (lexer.current > 0) lexer.source[lexer.current - 1] else '?';
                 std.debug.print("Unexpected character '{c}' at line {}, column {}.\n", .{ char, lexer.line, lexer.column });
+                printSourceHighlight(args[1], lexer.line, lexer.column, 1);
             },
             error.UNTERMINATED_STRING_LITERAL => {
                 std.debug.print("Unterminated string literal starting at line {}, column {}.\n", .{ lexer.line, lexer.column });
+                printSourceHighlight(args[1], lexer.line, lexer.column, 1);
             },
             else => {
                 std.debug.print("Unexpected scanning error: {s}\n", .{@errorName(err)});
@@ -140,6 +142,7 @@ fn run(init: std.process.Init) anyerror!void {
                 std.debug.print("Unexpected parsing error: {s}\n", .{@errorName(err)});
             },
         }
+        printSourceHighlight(args[1], token.location.line, token.location.column, token.lexeme.len);
         return err;
     };
 
@@ -173,10 +176,95 @@ fn run(init: std.process.Init) anyerror!void {
                 std.debug.print("Unimplemented feature encountered.\n", .{});
             },
         }
+        if (interpreter.last_expression) |last_expr| {
+            if (findExprLocation(tokens, last_expr)) |token| {
+                printSourceHighlight(args[1], token.location.line, token.location.column, token.lexeme.len);
+            }
+        }
         return err;
     };
     const printedValue = try Interpreter.printValue(arena, value);
     try std.Io.File.stdout().writeStreamingAll(init.io, printedValue);
     try std.Io.File.stdout().writeStreamingAll(init.io, "\n");
     if (false) return error.Unexpected;
+}
+
+const Token = zulu.Token;
+const Expression = zulu.Expression;
+
+fn findTokenByLexemePtr(tokens: []const Token, lexeme: []const u8) ?Token {
+    for (tokens) |token| {
+        if (token.lexeme.ptr == lexeme.ptr) {
+            return token;
+        }
+    }
+    return null;
+}
+
+fn findExprLocation(tokens: []const Token, expr: *Expression) ?Token {
+    switch (expr.*) {
+        .Variable => |v| return findTokenByLexemePtr(tokens, v),
+        .Number => |n| return findTokenByLexemePtr(tokens, n),
+        .String => |s| return findTokenByLexemePtr(tokens, s),
+        .Boolean => |b| {
+            const target_text = if (b) "true" else "false";
+            for (tokens) |token| {
+                if (std.ascii.eqlIgnoreCase(token.lexeme, target_text)) {
+                    return token;
+                }
+            }
+            return null;
+        },
+        .BinaryOperation => |bop| return findExprLocation(tokens, bop.left),
+        .Not => |not| return findExprLocation(tokens, not),
+        .Condition => |cond| return findExprLocation(tokens, cond.expression),
+        .Declaration => |decl| return findTokenByLexemePtr(tokens, decl.identifier),
+        .Lambda => |lam| return findTokenByLexemePtr(tokens, lam.identifier),
+        .Application => |app| return findExprLocation(tokens, app.callee),
+    }
+}
+
+fn printSourceHighlight(source: []const u8, line_num: usize, col_num: usize, lexeme_len: usize) void {
+    var current_line: usize = 1;
+    var line_start: usize = 0;
+    var line_end: usize = 0;
+    
+    for (source, 0..) |char, i| {
+        if (current_line == line_num) {
+            if (line_start == 0 and i > 0 and source[i - 1] == '\n') {
+                line_start = i;
+            } else if (i == 0) {
+                line_start = 0;
+            }
+        }
+        if (char == '\n') {
+            if (current_line == line_num) {
+                line_end = i;
+                break;
+            }
+            current_line += 1;
+        }
+    }
+    if (line_end == 0) {
+        line_end = source.len;
+    }
+    
+    const line_content = source[line_start..line_end];
+    
+    std.debug.print("\n  | {s}\n", .{line_content});
+    std.debug.print("  | ", .{});
+    
+    var i: usize = 1;
+    while (i < col_num) : (i += 1) {
+        std.debug.print(" ", .{});
+    }
+    
+    std.debug.print(ansi.bold ++ ansi.red, .{});
+    var len = lexeme_len;
+    if (len == 0) len = 1;
+    i = 0;
+    while (i < len) : (i += 1) {
+        std.debug.print("^", .{});
+    }
+    std.debug.print(ansi.reset ++ "\n\n", .{});
 }

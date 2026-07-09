@@ -4,10 +4,12 @@ const Expression = @import("./ast.zig").Expression;
 const Bop = @import("./ast.zig").Bop;
 
 allocator: std.mem.Allocator,
+last_expression: ?*Expression = null,
 
 pub fn init(allocator: std.mem.Allocator) Interpreter {
     return Interpreter{
         .allocator = allocator,
+        .last_expression = null,
     };
 }
 
@@ -85,6 +87,7 @@ pub fn eval(self: *Interpreter, expression: *Expression) !Value {
 }
 
 fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) InterpreterError!Value {
+    self.last_expression = expression;
     switch (expression.*) {
         .Number => |num| {
             const periodIndex = std.mem.find(u8, num, ".");
