@@ -73,7 +73,7 @@ pub const Parser = struct {
             if (isEquality(expr)) {
                 const leftNode = try getBopLeftNode(expr);
                 if (leftNode.* != Expression.Variable) return error.EXPECTED_VARIABLE_AT_DECLARATION;
-                const ident = expr.BinaryOperation.left.Variable.identifier;
+                const ident = expr.BinaryOperation.left.Variable;
                 const expression = expr.BinaryOperation.right;
                 const block = try self.declaration();
 
@@ -279,50 +279,36 @@ pub const Parser = struct {
             if (self.matchToken(.NUMBER)) {
                 const num = self.previousToken();
                 expr.* = Expression{
-                    .Number = .{
-                        .value = try std.fmt.allocPrint(self.allocator, "-{s}", .{num.lexeme}),
-                    },
+                    .Number = try std.fmt.allocPrint(self.allocator, "-{s}", .{num.lexeme}),
                 };
             }
         } else if (self.matchToken(.BANG)) {
             const rest = try self.primary();
 
             expr.* = Expression{
-                .Not = .{
-                    .expression = rest,
-                },
+                .Not = rest,
             };
         } else if (self.matchToken(.NUMBER)) {
             expr.* = Expression{
-                .Number = .{
-                    .value = token.lexeme,
-                },
+                .Number = token.lexeme,
             };
         } else if (self.matchToken(.STRING)) {
             const value = try self.stringOfLexeme(token.lexeme);
 
             expr.* = Expression{
-                .String = .{
-                    .value = value,
-                },
+                .String = value,
             };
         } else if (self.matchToken(.IDENT)) {
             expr.* = Expression{
-                .Variable = .{
-                    .identifier = token.lexeme,
-                },
+                .Variable = token.lexeme,
             };
         } else if (self.matchToken(.KW_TRUE)) {
             expr.* = Expression{
-                .Boolean = .{
-                    .value = true,
-                },
+                .Boolean = true,
             };
         } else if (self.matchToken(.KW_FALSE)) {
             expr.* = Expression{
-                .Boolean = .{
-                    .value = false,
-                },
+                .Boolean = false,
             };
         } else if (self.matchToken(.LPAR)) {
             expr = try self.declaration();

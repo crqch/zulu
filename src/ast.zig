@@ -25,21 +25,11 @@ pub const Expression = union(enum) {
         left: *Expression,
         right: *Expression,
     },
-    Not: struct {
-        expression: *Expression,
-    },
-    Variable: struct {
-        identifier: []const u8,
-    },
-    Number: struct {
-        value: []const u8,
-    },
-    Boolean: struct {
-        value: bool,
-    },
-    String: struct {
-        value: []const u8,
-    },
+    Not: *Expression,
+    Variable: []const u8,
+    Number: []const u8,
+    Boolean: bool,
+    String: []const u8,
     Declaration: struct {
         identifier: []const u8,
         expression: *Expression,
@@ -104,16 +94,16 @@ pub const AstPrinter = struct {
             .String => |str| {
                 try self.buffer.print(self.allocator, "String\n", .{});
                 try self.buffer.appendNTimes(self.allocator, ' ', level + 1);
-                try self.buffer.print(self.allocator, "{s}\n", .{str.value});
+                try self.buffer.print(self.allocator, "{s}\n", .{str});
             },
             .Number => |num| {
-                try self.buffer.print(self.allocator, "Number( {s} )\n", .{num.value});
+                try self.buffer.print(self.allocator, "Number( {s} )\n", .{num});
             },
             .Boolean => |b| {
-                try self.buffer.print(self.allocator, "Boolean( {s} )\n", .{if (b.value) "True" else "False"});
+                try self.buffer.print(self.allocator, "Boolean( {s} )\n", .{if (b) "True" else "False"});
             },
             .Variable => |v| {
-                try self.buffer.print(self.allocator, "Variable( {s} )\n", .{v.identifier});
+                try self.buffer.print(self.allocator, "Variable( {s} )\n", .{v});
             },
             .BinaryOperation => |bop| {
                 try self.buffer.print(self.allocator, "BinaryOperation( {s} )\n", .{@tagName(bop.operation)});

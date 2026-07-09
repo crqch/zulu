@@ -87,39 +87,39 @@ pub fn eval(self: *Interpreter, expression: *Expression) !Value {
 fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) InterpreterError!Value {
     switch (expression.*) {
         .Number => |num| {
-            const periodIndex = std.mem.find(u8, num.value, ".");
+            const periodIndex = std.mem.find(u8, num, ".");
 
             if (periodIndex) |index| {
                 if (index == 0) {
-                    expression.Number.value = std.fmt.allocPrint(self.allocator, "0{s}", .{num.value}) catch {
+                    expression.Number = std.fmt.allocPrint(self.allocator, "0{s}", .{num}) catch {
                         return InterpreterError.MEMORY_ALLOCATION_FAILED;
                     };
                 }
 
-                const float = std.fmt.parseFloat(f64, expression.Number.value) catch {
+                const float = std.fmt.parseFloat(f64, expression.Number) catch {
                     return InterpreterError.FLOAT_PARSING_FAILED;
                 };
                 return Value{ .Float = float };
             }
 
             // TODO: Add other number bases
-            const int = std.fmt.parseInt(i32, num.value, 10) catch {
+            const int = std.fmt.parseInt(i32, num, 10) catch {
                 return InterpreterError.INT_PARSING_FAILED;
             };
             return Value{ .Integer = int };
         },
         .String => |str| {
             return Value{
-                .String = str.value,
+                .String = str,
             };
         },
         .Boolean => |boolean| {
             return Value{
-                .Boolean = boolean.value,
+                .Boolean = boolean,
             };
         },
         .Variable => |variable| {
-            if (environment.get(variable.identifier)) |value| {
+            if (environment.get(variable)) |value| {
                 return value;
             }
             return InterpreterError.UNBOUND_VARIABLE;
@@ -133,7 +133,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             };
         },
         .Not => |not| {
-            const notValue = try self._eval(not.expression, environment);
+            const notValue = try self._eval(not, environment);
 
             if (notValue != .Boolean) return InterpreterError.UNEXPECTED_TYPE;
 
