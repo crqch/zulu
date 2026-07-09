@@ -53,6 +53,11 @@ const keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "or", .KW_OR },
 });
 
+pub const LexerError = error{
+    UNMATCHED_TOKEN,
+    UNTERMINATED_STRING_LITERAL,
+} || std.mem.Allocator.Error;
+
 pub const Lexer = struct {
     allocator: std.mem.Allocator,
     tokens: std.ArrayList(Token),
@@ -70,7 +75,7 @@ pub const Lexer = struct {
         self.tokens.deinit(self.allocator);
     }
 
-    pub fn scanTokens(self: *Lexer) ![]Token {
+    pub fn scanTokens(self: *Lexer) LexerError![]Token {
         while (!self.isAtEnd()) {
             self.start = self.current;
             try self.scanToken();
@@ -82,7 +87,7 @@ pub const Lexer = struct {
         return self.tokens.items;
     }
 
-    fn scanToken(self: *Lexer) !void {
+    fn scanToken(self: *Lexer) LexerError!void {
         const char = self.advance();
         switch (char) {
             '+', '-', '/', '*', '=', '!', '(', ')', '[', ']', ';', '>', '<' => {
@@ -125,7 +130,7 @@ pub const Lexer = struct {
         }
     }
 
-    fn number(self: *Lexer, char: u8) !void {
+    fn number(self: *Lexer, char: u8) LexerError!void {
         var point = char == '.';
         while (!self.isAtEnd() and std.ascii.isDigit(self.peek())) self.skip();
 
@@ -141,7 +146,7 @@ pub const Lexer = struct {
         try self.addToken(.NUMBER);
     }
 
-    fn identifier(self: *Lexer) !void {
+    fn identifier(self: *Lexer) LexerError!void {
         while (!self.isAtEnd() and (isValidIdentChar(self.peek()) or std.ascii.isDigit(self.peek()))) self.skip();
         const lower = try lowerOfString(self.allocator, self.source[self.start..self.current]);
         defer self.allocator.free(lower);
@@ -150,7 +155,7 @@ pub const Lexer = struct {
         try self.addToken(tokenType);
     }
 
-    fn string(self: *Lexer) !void {
+    fn string(self: *Lexer) LexerError!void {
         var height: usize = 0;
         while (!self.isAtEnd() and (self.peek() != '"' or self.escapeCharacter())) {
             if (self.peek() == '\n') height += 1;
@@ -192,7 +197,7 @@ pub const Lexer = struct {
         self.current += 1;
     }
 
-    fn addToken(self: *Lexer, tp: TokenType) !void {
+    fn addToken(self: *Lexer, tp: TokenType) LexerError!void {
         try self.tokens.append(self.allocator, Token{ .type = tp, .lexeme = self.source[self.start..self.current], .location = Location{ .column = self.column, .line = self.line } });
         self.column += self.current - self.start;
     }
