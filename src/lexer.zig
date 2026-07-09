@@ -121,7 +121,7 @@ pub const Lexer = struct {
             if (point) return error.UNMATCHED_TOKEN;
             point = true;
             self.skip();
-            while (std.ascii.isDigit(self.peek())) self.skip();
+            while (!self.isAtEnd() and std.ascii.isDigit(self.peek())) self.skip();
         }
 
         if (!self.isAtEnd() and self.peek() == '.') return error.UNMATCHED_TOKEN;
