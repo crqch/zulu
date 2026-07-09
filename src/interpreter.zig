@@ -184,7 +184,16 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                         },
                     }
                 },
-                else => return InterpreterError.UNIMPLEMENTED,
+                Bop.GT, Bop.GTEQ, Bop.LT, Bop.LTEQ => {
+                    try assertType(&[_]Value{ left, right }, &[_]ValueType{ .Integer, .Float });
+                    try castType(&left, &right);
+
+                    return switch (left) {
+                        .Integer => Value{ .Boolean = try numericComparison(i64, left.Integer, right.Integer, bop.operation) },
+                        .Float => Value{ .Boolean = try numericComparison(f64, left.Float, right.Float, bop.operation) },
+                        else => unreachable,
+                    };
+                },
             };
         },
         else => return error.UNIMPLEMENTED,
@@ -254,6 +263,16 @@ fn numericOperation(comptime T: type, left: T, right: T, operation: Bop) Interpr
             return left / right;
         },
         .MULTIPLY => left * right,
+        else => unreachable,
+    };
+}
+
+fn numericComparison(comptime T: type, left: T, right: T, operation: Bop) InterpreterError!bool {
+    return switch (operation) {
+        .GT => left > right,
+        .GTEQ => left >= right,
+        .LT => left < right,
+        .LTEQ => left <= right,
         else => unreachable,
     };
 }
