@@ -6,6 +6,20 @@ const lexer = @import("lexer.zig");
 const Token = lexer.Token;
 const TokenType = lexer.TokenType;
 
+pub const ParserError = error{
+    EOF_NOT_REACHED,
+    EXPECTED_VARIABLE_AT_DECLARATION,
+    EXPECTED_LEFT_PARENTHESES,
+    EXPECTED_RIGHT_PARENTHESES,
+    EXPECTED_ELSE_KEYWORD,
+    LAMBDA_UNRESOLVED,
+    EXPECTED_EXPRESSION,
+    PARENTHESES_UNMATCHED,
+    UNKNOWN_ESCAPE_CHARACTER,
+    EXPECTED_BOP,
+    NOT_A_BINARY_OPERATION,
+} || std.mem.Allocator.Error;
+
 pub const Parser = struct {
     allocator: std.mem.Allocator,
     tokens: []Token,
@@ -15,7 +29,7 @@ pub const Parser = struct {
         return Parser{ .allocator = allocator, .tokens = tokens };
     }
 
-    pub fn parse(self: *Parser) !*Expression {
+    pub fn parse(self: *Parser) ParserError!*Expression {
         const expr = try self.declaration();
         if (!self.matchToken(.EOF)) return error.EOF_NOT_REACHED;
         return expr;
@@ -55,7 +69,7 @@ pub const Parser = struct {
         return self.tokens[self.current - 1];
     }
 
-    fn freshExpression(self: *Parser) anyerror!*Expression {
+    fn freshExpression(self: *Parser) ParserError!*Expression {
         return try self.allocator.create(Expression);
     }
 
@@ -66,7 +80,7 @@ pub const Parser = struct {
         return self.previousToken().type == tokenType;
     }
 
-    fn declaration(self: *Parser) anyerror!*Expression {
+    fn declaration(self: *Parser) ParserError!*Expression {
         const expr = try self.ifElse();
 
         if (self.matchToken(.SEMICOLON)) {
@@ -90,14 +104,14 @@ pub const Parser = struct {
         return expr;
     }
 
-    fn ifElse(self: *Parser) anyerror!*Expression {
+    fn ifElse(self: *Parser) ParserError!*Expression {
         if (self.matchToken(.KW_IF)) {
             if (!self.matchToken(.LPAR)) return error.EXPECTED_LEFT_PARENTHESES;
             const expression = try self.logical();
             if (!self.matchToken(.RPAR)) return error.EXPECTED_RIGHT_PARENTHESES;
             const satisfyBlock = try self.logical();
             if (!self.matchToken(.KW_ELSE)) return error.EXPECTED_ELSE_KEYWORD;
-            const elseBlock = try self.logical();
+            const elseBlock = try self.ifElse();
 
             const fresh = try self.freshExpression();
 
@@ -115,7 +129,7 @@ pub const Parser = struct {
         return try self.logical();
     }
 
-    fn logical(self: *Parser) anyerror!*Expression {
+    fn logical(self: *Parser) ParserError!*Expression {
         var left = try self.equality();
 
         while (self.matchToken(.KW_AND) or self.matchToken(.KW_OR)) {
@@ -135,7 +149,7 @@ pub const Parser = struct {
         return left;
     }
 
-    fn equality(self: *Parser) anyerror!*Expression {
+    fn equality(self: *Parser) ParserError!*Expression {
         var left = try self.comparison();
 
         while (self.matchToken(.EQEQ) or self.matchToken(.EQ) or self.matchToken(.NOTEQ) or self.matchToken(.NOTEQEQ)) {
@@ -158,7 +172,7 @@ pub const Parser = struct {
         return left;
     }
 
-    fn comparison(self: *Parser) anyerror!*Expression {
+    fn comparison(self: *Parser) ParserError!*Expression {
         var left = try self.term();
 
         while (self.matchToken(.GT) or self.matchToken(.GTEQ) or self.matchToken(.LT) or self.matchToken(.LTEQ)) {
@@ -178,7 +192,7 @@ pub const Parser = struct {
         return left;
     }
 
-    fn term(self: *Parser) anyerror!*Expression {
+    fn term(self: *Parser) ParserError!*Expression {
         var left = try self.factor();
 
         while (self.matchToken(.PLUS) or self.matchToken(.MINUS)) {
@@ -201,7 +215,7 @@ pub const Parser = struct {
         return left;
     }
 
-    fn factor(self: *Parser) anyerror!*Expression {
+    fn factor(self: *Parser) ParserError!*Expression {
         var left = try self.application();
 
         while (self.matchToken(.ASTERISK) or self.matchToken(.SLASH)) {
@@ -223,7 +237,7 @@ pub const Parser = struct {
         return left;
     }
 
-    fn application(self: *Parser) anyerror!*Expression {
+    fn application(self: *Parser) ParserError!*Expression {
         var left = try self.lambda();
 
         while (self.isAtPrimaryStart()) {
@@ -241,7 +255,7 @@ pub const Parser = struct {
         return left;
     }
 
-    fn lambda(self: *Parser) anyerror!*Expression {
+    fn lambda(self: *Parser) ParserError!*Expression {
         if (self.matchToken(.LBRA)) {
             var idents = try std.ArrayList([]const u8).initCapacity(self.allocator, 0);
 
@@ -272,7 +286,7 @@ pub const Parser = struct {
         return self.primary();
     }
 
-    fn primary(self: *Parser) anyerror!*Expression {
+    fn primary(self: *Parser) ParserError!*Expression {
         var expr = try self.freshExpression();
         const token = self.tokens[self.current];
         if (self.matchToken(.MINUS)) {
@@ -318,7 +332,7 @@ pub const Parser = struct {
         return expr;
     }
 
-    fn stringOfLexeme(self: *Parser, lexeme: []const u8) ![]u8 {
+    fn stringOfLexeme(self: *Parser, lexeme: []const u8) ParserError![]u8 {
         var string = try std.ArrayList(u8).initCapacity(self.allocator, 0);
         var escape = false;
 
@@ -352,12 +366,12 @@ fn isEquality(expression: *Expression) bool {
     return expression.* == .BinaryOperation and expression.BinaryOperation.operation == Bop.EQ;
 }
 
-fn getBopLeftNode(expression: *Expression) !*Expression {
+fn getBopLeftNode(expression: *Expression) ParserError!*Expression {
     if (expression.* != .BinaryOperation) return error.EXPECTED_BOP;
     return expression.BinaryOperation.left;
 }
 
-fn bopOfToken(tp: TokenType) !Bop {
+fn bopOfToken(tp: TokenType) ParserError!Bop {
     return switch (tp) {
         .EQ => Bop.EQ,
         .EQEQ => Bop.EQEQ,

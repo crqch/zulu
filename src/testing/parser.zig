@@ -1,8 +1,11 @@
 const std = @import("std");
+
 const zulu = @import("zulu");
 const Parser = zulu.Parser;
 const Lexer = zulu.Lexer;
 const AstPrinter = zulu.AstPrinter;
+
+const ansi = zulu.ansi;
 
 pub const Testing = struct {
     allocator: std.mem.Allocator,
@@ -23,6 +26,12 @@ pub const Testing = struct {
         }
     };
 
+    const Failure = struct {
+        file_path: []const u8,
+        expected: []const u8,
+        got: []const u8,
+    };
+
     pub fn init(allocator: std.mem.Allocator, io: std.Io) !Testing {
         return Testing{
             .allocator = allocator,
@@ -31,10 +40,14 @@ pub const Testing = struct {
     }
 
     pub fn runTests(self: *Testing) !void {
-        std.log.info("\nRunning PASS tests...\n", .{});
-        const passTests = try self.runPassTests();
-        std.log.info("\nRunning FAIL tests...\n", .{});
-        const failTests = try self.runFailTests();
+        var failures: std.ArrayList(Failure) = .empty;
+        defer failures.deinit(self.allocator);
+
+        std.debug.print(ansi.bold ++ ansi.blue ++ "· Running PASS tests (parsing valid programs)..." ++ ansi.reset ++ "\n", .{});
+        const passTests = try self.runPassTests(&failures);
+
+        std.debug.print("\n" ++ ansi.bold ++ ansi.blue ++ "· Running FAIL tests (parsing invalid programs)..." ++ ansi.reset ++ "\n", .{});
+        const failTests = try self.runFailTests(&failures);
 
         var allTests = TestsStats{
             .fail = 0,
@@ -44,31 +57,49 @@ pub const Testing = struct {
         allTests.add(passTests);
         allTests.add(failTests);
 
-        std.log.info("\nSummary of tests\nClass\tpassed\tfailed\nPASS\t{d}\t{d}\nFAIL\t{d}\t{d}\nALL\t{d}\t{d}", .{
-            passTests.pass,
-            passTests.fail,
+        if (failures.items.len > 0) {
+            std.debug.print("\n" ++ ansi.bold ++ ansi.red ++ "Failures:" ++ ansi.reset ++ "\n", .{});
+            for (failures.items) |fail| {
+                std.debug.print("\n" ++ ansi.red ++ "  ✗ " ++ ansi.bold ++ "{s}" ++ ansi.reset ++ "\n" ++
+                    "    " ++ ansi.cyan ++ "Expected:" ++ ansi.reset ++ "\n" ++
+                    "      {s}\n" ++
+                    "    " ++ ansi.red ++ "Got:" ++ ansi.reset ++ "\n" ++
+                    "      {s}\n", .{ fail.file_path, fail.expected, fail.got });
+            }
+        }
 
-            failTests.pass,
-            failTests.fail,
+        const green = ansi.green;
+        const red = ansi.red;
+        const reset = ansi.reset;
+        const bold = ansi.bold;
 
-            allTests.pass,
-            allTests.fail,
-        });
+        std.debug.print("\n" ++ bold ++ "┌──────────────────────────────────────────────┐" ++ reset ++ "\n", .{});
+        std.debug.print(bold ++ "│                 " ++ ansi.cyan ++ "TEST SUMMARY" ++ reset ++ bold ++ "                 │" ++ reset ++ "\n", .{});
+        std.debug.print(bold ++ "├─────────────────┬──────────────┬─────────────┤" ++ reset ++ "\n", .{});
+        std.debug.print(bold ++ "│" ++ reset ++ " Suite           " ++ bold ++ "│" ++ green ++ " Passed       " ++ reset ++ bold ++ "│" ++ red ++ " Failed      " ++ reset ++ bold ++ "│" ++ reset ++ "\n", .{});
+        std.debug.print(bold ++ "├─────────────────┼──────────────┼─────────────┤" ++ reset ++ "\n", .{});
+        std.debug.print(bold ++ "│" ++ reset ++ " Expected Pass   " ++ bold ++ "│ " ++ green ++ "{d:<12}" ++ reset ++ bold ++ " │ " ++ red ++ "{d:<11}" ++ bold ++ reset ++ " │" ++ reset ++ "\n", .{ passTests.pass, passTests.fail });
+        std.debug.print(bold ++ "│" ++ reset ++ " Expected Fail   " ++ bold ++ "│ " ++ green ++ "{d:<12}" ++ reset ++ bold ++ " │ " ++ red ++ "{d:<11}" ++ bold ++ reset ++ " │" ++ reset ++ "\n", .{ failTests.pass, failTests.fail });
+        std.debug.print(bold ++ "├─────────────────┼──────────────┼─────────────┤" ++ reset ++ "\n", .{});
+        std.debug.print(bold ++ "│" ++ reset ++ " Total           " ++ bold ++ "│ " ++ green ++ "{d:<12}" ++ reset ++ bold ++ " │ " ++ red ++ "{d:<11}" ++ bold ++ reset ++ " │" ++ reset ++ "\n", .{ allTests.pass, allTests.fail });
+        std.debug.print(bold ++ "└─────────────────┴──────────────┴─────────────┘" ++ reset ++ "\n", .{});
     }
 
-    fn runPassTests(self: *Testing) !TestsStats {
+    fn runPassTests(self: *Testing, failures: *std.ArrayList(Failure)) !TestsStats {
         var stats = TestsStats{
             .fail = 0,
             .pass = 0,
         };
 
         var path = try std.fmt.allocPrint(self.allocator, "tests/parser/pass", .{});
+        defer self.allocator.free(path);
 
         var dir = try std.Io.Dir.cwd().openDir(self.io, path, .{ .iterate = true });
         defer dir.close(self.io);
 
         var dir_iterator = dir.iterate();
 
+        std.debug.print("  ", .{});
         while (try dir_iterator.next(self.io)) |entry| {
             switch (entry.kind) {
                 .directory => {
@@ -87,17 +118,23 @@ pub const Testing = struct {
                 },
                 .file => {
                     const filePath = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ path, entry.name });
+                    defer self.allocator.free(filePath);
 
-                    switch (try self.runPassTest(filePath)) {
-                        .pass => stats.pass += 1,
-                        .fail => stats.fail += 1,
+                    switch (try self.runPassTest(filePath, failures)) {
+                        .pass => {
+                            std.debug.print(ansi.green ++ "•" ++ ansi.reset, .{});
+                            stats.pass += 1;
+                        },
+                        .fail => {
+                            std.debug.print(ansi.red ++ "✗" ++ ansi.reset, .{});
+                            stats.fail += 1;
+                        },
                     }
-
-                    self.allocator.free(filePath);
                 },
                 else => {},
             }
         }
+        std.debug.print("\n", .{});
 
         return stats;
     }
@@ -114,7 +151,7 @@ pub const Testing = struct {
         return contents;
     }
 
-    fn runPassTest(self: *Testing, filePath: []const u8) !TestStatus {
+    fn runPassTest(self: *Testing, filePath: []const u8, failures: *std.ArrayList(Failure)) !TestStatus {
         errdefer std.log.debug("Evaluating test {s}", .{filePath});
         const fileContent = try self.readFileContents(filePath);
         errdefer std.log.debug("Content of the test:\n{s}", .{fileContent});
@@ -142,27 +179,35 @@ pub const Testing = struct {
         const trimmedExpectedAst = std.mem.trim(u8, expectedAst, " \n");
 
         if (std.mem.eql(u8, trimmedParsedAst, trimmedExpectedAst)) {
-            std.log.info("[+] {s}", .{filePath});
             return .pass;
         } else {
-            std.log.err("[-] {s}\n\tGot ast:\n{s}\n\n\tExpected ast:\n{s}", .{ filePath, trimmedParsedAst, trimmedExpectedAst });
+            const dup_path = try self.allocator.dupe(u8, filePath);
+            const dup_expected = try self.allocator.dupe(u8, trimmedExpectedAst);
+            const dup_got = try self.allocator.dupe(u8, trimmedParsedAst);
+            try failures.append(self.allocator, .{
+                .file_path = dup_path,
+                .expected = dup_expected,
+                .got = dup_got,
+            });
             return .fail;
         }
     }
 
-    fn runFailTests(self: *Testing) !TestsStats {
+    fn runFailTests(self: *Testing, failures: *std.ArrayList(Failure)) !TestsStats {
         var stats = TestsStats{
             .fail = 0,
             .pass = 0,
         };
 
         var path = try std.fmt.allocPrint(self.allocator, "tests/parser/fail", .{});
+        defer self.allocator.free(path);
 
         var dir = try std.Io.Dir.cwd().openDir(self.io, path, .{ .iterate = true });
         defer dir.close(self.io);
 
         var dir_iterator = dir.iterate();
 
+        std.debug.print("  ", .{});
         while (try dir_iterator.next(self.io)) |entry| {
             switch (entry.kind) {
                 .directory => {
@@ -181,22 +226,28 @@ pub const Testing = struct {
                 },
                 .file => {
                     const filePath = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ path, entry.name });
+                    defer self.allocator.free(filePath);
 
-                    switch (try self.runFailTest(filePath)) {
-                        .pass => stats.pass += 1,
-                        .fail => stats.fail += 1,
+                    switch (try self.runFailTest(filePath, failures)) {
+                        .pass => {
+                            std.debug.print(ansi.green ++ "•" ++ ansi.reset, .{});
+                            stats.pass += 1;
+                        },
+                        .fail => {
+                            std.debug.print(ansi.red ++ "✗" ++ ansi.reset, .{});
+                            stats.fail += 1;
+                        },
                     }
-
-                    self.allocator.free(filePath);
                 },
                 else => {},
             }
         }
+        std.debug.print("\n", .{});
 
         return stats;
     }
 
-    fn runFailTest(self: *Testing, filePath: []const u8) !TestStatus {
+    fn runFailTest(self: *Testing, filePath: []const u8, failures: *std.ArrayList(Failure)) !TestStatus {
         errdefer std.log.debug("Evaluating test {s}", .{filePath});
         const fileContent = try self.readFileContents(filePath);
         errdefer std.log.debug("Content of the test:\n{s}", .{fileContent});
@@ -219,13 +270,15 @@ pub const Testing = struct {
 
         const expr = parser.parse() catch |err| {
             if (std.mem.eql(u8, @errorName(err), trimmedError)) {
-                std.log.info("[+] {s}", .{filePath});
                 return .pass;
             } else {
-                std.log.err("[-] {s}\n\tGot error:\n{s}\n\n\tExpected error:\n{s}", .{
-                    filePath,
-                    @errorName(err),
-                    trimmedError,
+                const dup_path = try self.allocator.dupe(u8, filePath);
+                const dup_expected = try self.allocator.dupe(u8, trimmedError);
+                const dup_got = try self.allocator.dupe(u8, @errorName(err));
+                try failures.append(self.allocator, .{
+                    .file_path = dup_path,
+                    .expected = dup_expected,
+                    .got = dup_got,
                 });
                 return .fail;
             }
@@ -234,10 +287,13 @@ pub const Testing = struct {
         const parsedAst = try AstPrinter.prettyPrint(testAllocator, expr.*);
         const trimmedParsedAst = std.mem.trim(u8, parsedAst, " \n");
 
-        std.log.err("[-] {s}\n\tGot ast:\n{s}\n\n\tExpected error:\n{s}", .{
-            filePath,
-            trimmedParsedAst,
-            trimmedError,
+        const dup_path = try self.allocator.dupe(u8, filePath);
+        const dup_expected = try self.allocator.dupe(u8, trimmedError);
+        const dup_got = try self.allocator.dupe(u8, trimmedParsedAst);
+        try failures.append(self.allocator, .{
+            .file_path = dup_path,
+            .expected = dup_expected,
+            .got = dup_got,
         });
 
         return .fail;
