@@ -2,7 +2,9 @@ const std = @import("std");
 const Io = std.Io;
 
 const argsParser = @import("args");
+const Repl = @import("./repl.zig");
 const zulu = @import("zulu");
+const Options = zulu.Options;
 const Lexer = zulu.Lexer;
 const Parser = zulu.Parser;
 const AstPrinter = zulu.AstPrinter;
@@ -27,24 +29,6 @@ fn enableAnsiColors() void {
 
 pub const std_options: std.Options = .{
     .fmt_max_depth = 15, // Increase this to however deep your AST gets
-};
-
-const Options = struct {
-    text: bool = false,
-    help: bool = false,
-    @"debug-lexer": bool = false,
-    @"halt-lexer": bool = false,
-    @"debug-parser": bool = false,
-    @"halt-parser": bool = false,
-
-    pub const shorthands = .{
-        .t = "text",
-        .h = "help",
-        .l = "debug-lexer",
-        .L = "halt-lexer",
-        .p = "debug-parser",
-        .P = "halt-parser",
-    };
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -112,49 +96,8 @@ fn readFile(io: std.Io, arena: std.mem.Allocator, path: []const u8) ![]const u8 
     return contents;
 }
 
-fn run(init: std.process.Init) anyerror!void {
-    const arena: std.mem.Allocator = init.arena.allocator();
-    const options = argsParser.parseForCurrentProcess(Options, init, .print) catch return error.ParseArgumentsError;
-    defer options.deinit();
-
-    if (options.options.help) {
-        printUsage();
-        return;
-    }
-
-    if (options.positionals.len != 1) {
-        if (options.options.text) {
-            std.debug.print(ansi.bold ++ ansi.red ++ "Usage Error: " ++ ansi.reset ++ "No source code provided.\n", .{});
-            printUsage();
-        } else {
-            std.debug.print(ansi.bold ++ ansi.red ++ "Usage Error: " ++ ansi.reset ++ "No source file provided.\n", .{});
-            printUsage();
-        }
-        return error.NO_INPUT;
-    }
-
-    if (std.mem.eql(u8, options.positionals[0], "repl")) {
-        std.debug.print("Entering REPL mode.\n", .{});
-
-        std.debug.print(ansi.red ++ "TODO\n", .{});
-
-        return;
-    }
-
-    const source = if (options.options.text) options.positionals[0] else readFile(init.io, arena, options.positionals[0]) catch |err| {
-        std.debug.print(ansi.bold ++ ansi.red ++ "Error: " ++ ansi.reset, .{});
-        switch (err) {
-            error.FileNotFound => {
-                std.debug.print("No such file: {s}\n", .{options.positionals[0]});
-            },
-            else => {
-                std.debug.print("Unknown error: {any}\n", .{err});
-            },
-        }
-        return;
-    };
-
-    var lexer = try Lexer.init(arena, source);
+pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Options) !?Interpreter.Value {
+    var lexer = try Lexer.init(allocator, source);
     defer lexer.deinit();
 
     const tokens = lexer.scanTokens() catch |err| {
@@ -176,18 +119,18 @@ fn run(init: std.process.Init) anyerror!void {
         return err;
     };
 
-    if (options.options.@"debug-lexer") {
+    if (options.@"debug-lexer") {
         std.debug.print(ansi.bold ++ ansi.green ++ "Lexer output:\n" ++ ansi.reset, .{});
         for (tokens) |token| {
             std.debug.print("\t{s}\n", .{token.lexeme});
         }
     }
 
-    if (options.options.@"halt-lexer") {
-        return;
+    if (options.@"halt-lexer") {
+        return null;
     }
 
-    var parser = Parser.init(arena, tokens);
+    var parser = Parser.init(allocator, tokens);
     const expression = parser.parse() catch |err| {
         std.debug.print(ansi.bold ++ ansi.red ++ "Parser Error: " ++ ansi.reset, .{});
         const token = if (parser.current < parser.tokens.len) parser.tokens[parser.current] else parser.tokens[parser.tokens.len - 1];
@@ -233,17 +176,17 @@ fn run(init: std.process.Init) anyerror!void {
         return err;
     };
 
-    if (options.options.@"debug-parser") {
+    if (options.@"debug-parser") {
         std.debug.print(ansi.bold ++ ansi.green ++ "Parser output:\n" ++ ansi.reset, .{});
-        const printedExpr = try AstPrinter.prettyPrint(arena, expression.*);
+        const printedExpr = try AstPrinter.prettyPrint(allocator, expression.*);
         std.debug.print("{s}\n", .{printedExpr});
     }
 
-    if (options.options.@"halt-parser") {
-        return;
+    if (options.@"halt-parser") {
+        return null;
     }
 
-    var interpreter = Interpreter.init(arena);
+    var interpreter = Interpreter.init(allocator);
 
     const value = interpreter.eval(expression) catch |err| {
         std.debug.print(ansi.bold ++ ansi.red ++ "Runtime Error: " ++ ansi.reset, .{});
@@ -277,9 +220,58 @@ fn run(init: std.process.Init) anyerror!void {
         }
         return err;
     };
-    const printedValue = try Interpreter.printValue(arena, value);
-    try std.Io.File.stdout().writeStreamingAll(init.io, printedValue);
-    try std.Io.File.stdout().writeStreamingAll(init.io, "\n");
+    return value;
+}
+
+fn run(init: std.process.Init) anyerror!void {
+    const arena: std.mem.Allocator = init.arena.allocator();
+    const options = argsParser.parseForCurrentProcess(Options, init, .print) catch return error.ParseArgumentsError;
+    defer options.deinit();
+
+    if (options.options.help) {
+        printUsage();
+        return;
+    }
+
+    if (options.positionals.len != 1) {
+        if (options.options.text) {
+            std.debug.print(ansi.bold ++ ansi.red ++ "Usage Error: " ++ ansi.reset ++ "No source code provided.\n", .{});
+            printUsage();
+        } else {
+            std.debug.print(ansi.bold ++ ansi.red ++ "Usage Error: " ++ ansi.reset ++ "No source file provided.\n", .{});
+            printUsage();
+        }
+        return error.NO_INPUT;
+    }
+
+    if (std.mem.eql(u8, options.positionals[0], "repl")) {
+        var repl = Repl.init(init.io, arena, options.options);
+        try repl.run();
+
+        return;
+    }
+
+    const source = if (options.options.text) options.positionals[0] else readFile(init.io, arena, options.positionals[0]) catch |err| {
+        std.debug.print(ansi.bold ++ ansi.red ++ "Error: " ++ ansi.reset, .{});
+        switch (err) {
+            error.FileNotFound => {
+                std.debug.print("No such file: {s}\n", .{options.positionals[0]});
+            },
+            else => {
+                std.debug.print("Unknown error: {any}\n", .{err});
+            },
+        }
+        return;
+    };
+
+    const value = try pipeline(arena, source, options.options);
+    if (value) |val| {
+        const printedValue = try Interpreter.printValue(arena, val);
+
+        try std.Io.File.stdout().writeStreamingAll(init.io, printedValue);
+        try std.Io.File.stdout().writeStreamingAll(init.io, "\n");
+    }
+
     if (false) return error.Unexpected;
 }
 

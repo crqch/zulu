@@ -59,7 +59,7 @@ const ValueType = enum {
     Closure,
 };
 
-const Value = union(ValueType) {
+pub const Value = union(ValueType) {
     Integer: i64,
     Float: f64,
     Boolean: bool,
