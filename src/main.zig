@@ -1,13 +1,15 @@
 const std = @import("std");
 const Io = std.Io;
 
+const argsParser = @import("args");
 const zulu = @import("zulu");
 const Lexer = zulu.Lexer;
 const Parser = zulu.Parser;
 const AstPrinter = zulu.AstPrinter;
 const Interpreter = zulu.Interpreter;
-
 const ansi = zulu.ansi;
+const Token = zulu.Token;
+const Expression = zulu.Expression;
 
 fn enableAnsiColors() void {
     if (@import("builtin").os.tag == .windows) {
@@ -25,6 +27,24 @@ fn enableAnsiColors() void {
 
 pub const std_options: std.Options = .{
     .fmt_max_depth = 15, // Increase this to however deep your AST gets
+};
+
+const Options = struct {
+    text: bool = false,
+    help: bool = false,
+    @"debug-lexer": bool = false,
+    @"halt-lexer": bool = false,
+    @"debug-parser": bool = false,
+    @"halt-parser": bool = false,
+
+    pub const shorthands = .{
+        .t = "text",
+        .h = "help",
+        .l = "debug-lexer",
+        .L = "halt-lexer",
+        .p = "debug-parser",
+        .P = "halt-parser",
+    };
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -67,18 +87,74 @@ pub fn main(init: std.process.Init) !void {
     };
 }
 
+fn printUsage() void {
+    std.debug.print(ansi.bold ++ "Usage: zulu [options] <source | repl>\n\n" ++ ansi.reset, .{});
+    std.debug.print("Options:\n", .{});
+    std.debug.print("  -t, --text             Take text input from positional argument\n", .{});
+    std.debug.print("  -h, --help             Display this help message\n", .{});
+
+    std.debug.print("\n" ++ ansi.blue ++ ansi.bold ++ "Debug options:\n" ++ ansi.reset, .{});
+    std.debug.print("  -l, --debug-lexer      Print lexer output (tokens)\n", .{});
+    std.debug.print("  -L, --halt-lexer       Stop after lexer\n", .{});
+    std.debug.print("  -p, --debug-parser     Print parser output (AST)\n", .{});
+    std.debug.print("  -P, --halt-parser      Stop after parser\n", .{});
+}
+
+fn readFile(io: std.Io, arena: std.mem.Allocator, path: []const u8) ![]const u8 {
+    const file = try std.Io.Dir.cwd().openFile(io, path, .{});
+    defer file.close(io);
+
+    var fileReader = file.reader(io, &.{});
+
+    const maxFileSize = 1024 * 1024 * 10;
+    const contents = fileReader.interface.allocRemaining(arena, .limited(maxFileSize));
+
+    return contents;
+}
+
 fn run(init: std.process.Init) anyerror!void {
     const arena: std.mem.Allocator = init.arena.allocator();
+    const options = argsParser.parseForCurrentProcess(Options, init, .print) catch return error.ParseArgumentsError;
+    defer options.deinit();
 
-    const args = try init.minimal.args.toSlice(arena);
+    if (options.options.help) {
+        printUsage();
+        return;
+    }
 
-    if (args.len != 2) {
-        std.debug.print(ansi.bold ++ ansi.red ++ "Usage Error: " ++ ansi.reset ++ "No source code provided.\n", .{});
-        std.debug.print("Run the interpreter with a string argument: zulu \"<source_code>\"\n", .{});
+    if (options.positionals.len != 1) {
+        if (options.options.text) {
+            std.debug.print(ansi.bold ++ ansi.red ++ "Usage Error: " ++ ansi.reset ++ "No source code provided.\n", .{});
+            printUsage();
+        } else {
+            std.debug.print(ansi.bold ++ ansi.red ++ "Usage Error: " ++ ansi.reset ++ "No source file provided.\n", .{});
+            printUsage();
+        }
         return error.NO_INPUT;
     }
 
-    var lexer = try Lexer.init(arena, args[1]);
+    if (std.mem.eql(u8, options.positionals[0], "repl")) {
+        std.debug.print("Entering REPL mode.\n", .{});
+
+        std.debug.print(ansi.red ++ "TODO\n", .{});
+
+        return;
+    }
+
+    const source = if (options.options.text) options.positionals[0] else readFile(init.io, arena, options.positionals[0]) catch |err| {
+        std.debug.print(ansi.bold ++ ansi.red ++ "Error: " ++ ansi.reset, .{});
+        switch (err) {
+            error.FileNotFound => {
+                std.debug.print("No such file: {s}\n", .{options.positionals[0]});
+            },
+            else => {
+                std.debug.print("Unknown error: {any}\n", .{err});
+            },
+        }
+        return;
+    };
+
+    var lexer = try Lexer.init(arena, source);
     defer lexer.deinit();
 
     const tokens = lexer.scanTokens() catch |err| {
@@ -87,11 +163,11 @@ fn run(init: std.process.Init) anyerror!void {
             error.UNMATCHED_TOKEN => {
                 const char = if (lexer.current > 0) lexer.source[lexer.current - 1] else '?';
                 std.debug.print("Unexpected character '{c}' at line {}, column {}.\n", .{ char, lexer.line, lexer.column });
-                printSourceHighlight(args[1], lexer.line, lexer.column, 1);
+                printSourceHighlight(source, lexer.line, lexer.column, 1);
             },
             error.UNTERMINATED_STRING_LITERAL => {
                 std.debug.print("Unterminated string literal starting at line {}, column {}.\n", .{ lexer.line, lexer.column });
-                printSourceHighlight(args[1], lexer.line, lexer.column, 1);
+                printSourceHighlight(source, lexer.line, lexer.column, 1);
             },
             else => {
                 std.debug.print("Unexpected scanning error: {s}\n", .{@errorName(err)});
@@ -99,6 +175,17 @@ fn run(init: std.process.Init) anyerror!void {
         }
         return err;
     };
+
+    if (options.options.@"debug-lexer") {
+        std.debug.print(ansi.bold ++ ansi.green ++ "Lexer output:\n" ++ ansi.reset, .{});
+        for (tokens) |token| {
+            std.debug.print("\t{s}\n", .{token.lexeme});
+        }
+    }
+
+    if (options.options.@"halt-lexer") {
+        return;
+    }
 
     var parser = Parser.init(arena, tokens);
     const expression = parser.parse() catch |err| {
@@ -142,12 +229,19 @@ fn run(init: std.process.Init) anyerror!void {
                 std.debug.print("Unexpected parsing error: {s}\n", .{@errorName(err)});
             },
         }
-        printSourceHighlight(args[1], token.location.line, token.location.column, token.lexeme.len);
+        printSourceHighlight(source, token.location.line, token.location.column, token.lexeme.len);
         return err;
     };
 
-    const printedExpr = try AstPrinter.prettyPrint(arena, expression.*);
-    _ = printedExpr;
+    if (options.options.@"debug-parser") {
+        std.debug.print(ansi.bold ++ ansi.green ++ "Parser output:\n" ++ ansi.reset, .{});
+        const printedExpr = try AstPrinter.prettyPrint(arena, expression.*);
+        std.debug.print("{s}\n", .{printedExpr});
+    }
+
+    if (options.options.@"halt-parser") {
+        return;
+    }
 
     var interpreter = Interpreter.init(arena);
 
@@ -178,7 +272,7 @@ fn run(init: std.process.Init) anyerror!void {
         }
         if (interpreter.last_expression) |last_expr| {
             if (findExprLocation(tokens, last_expr)) |token| {
-                printSourceHighlight(args[1], token.location.line, token.location.column, token.lexeme.len);
+                printSourceHighlight(source, token.location.line, token.location.column, token.lexeme.len);
             }
         }
         return err;
@@ -188,9 +282,6 @@ fn run(init: std.process.Init) anyerror!void {
     try std.Io.File.stdout().writeStreamingAll(init.io, "\n");
     if (false) return error.Unexpected;
 }
-
-const Token = zulu.Token;
-const Expression = zulu.Expression;
 
 fn findTokenByLexemePtr(tokens: []const Token, lexeme: []const u8) ?Token {
     for (tokens) |token| {
@@ -228,7 +319,7 @@ fn printSourceHighlight(source: []const u8, line_num: usize, col_num: usize, lex
     var current_line: usize = 1;
     var line_start: usize = 0;
     var line_end: usize = 0;
-    
+
     for (source, 0..) |char, i| {
         if (current_line == line_num) {
             if (line_start == 0 and i > 0 and source[i - 1] == '\n') {
@@ -248,17 +339,17 @@ fn printSourceHighlight(source: []const u8, line_num: usize, col_num: usize, lex
     if (line_end == 0) {
         line_end = source.len;
     }
-    
+
     const line_content = source[line_start..line_end];
-    
+
     std.debug.print("\n  | {s}\n", .{line_content});
     std.debug.print("  | ", .{});
-    
+
     var i: usize = 1;
     while (i < col_num) : (i += 1) {
         std.debug.print(" ", .{});
     }
-    
+
     std.debug.print(ansi.bold ++ ansi.red, .{});
     var len = lexeme_len;
     if (len == 0) len = 1;

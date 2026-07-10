@@ -111,7 +111,7 @@ pub const Parser = struct {
             if (!self.matchToken(.RPAR)) return error.EXPECTED_RIGHT_PARENTHESES;
             const satisfyBlock = try self.logical();
             if (!self.matchToken(.KW_ELSE)) return error.EXPECTED_ELSE_KEYWORD;
-            const elseBlock = try self.logical();
+            const elseBlock = try self.ifElse();
 
             const fresh = try self.freshExpression();
 
