@@ -6,6 +6,9 @@ const Expression = @import("./ast.zig").Expression;
 allocator: std.mem.Allocator,
 errorContext: ?TypeErrorContext,
 
+nextWildcardId: usize,
+substitutions: std.AutoHashMap(usize, *Type),
+
 pub const Type = union(enum) {
     Int,
     Float,
@@ -15,7 +18,7 @@ pub const Type = union(enum) {
         argType: *Type,
         returnType: *Type,
     },
-    Wildcard,
+    Wildcard: usize,
 };
 
 const TypeEnv = struct {
@@ -81,13 +84,36 @@ pub fn init(allocator: std.mem.Allocator) TypeChecker {
     return TypeChecker{
         .allocator = allocator,
         .errorContext = null,
+
+        .nextWildcardId = 0,
+        .substitutions = std.AutoHashMap(usize, *Type).init(allocator),
     };
 }
 
 pub fn inferType(self: *TypeChecker, expression: *Expression) TypeError!*Type {
     const typeEnv = try TypeEnv.init(self.allocator, null);
 
-    return try self._inferType(expression, typeEnv);
+    return self.finalizeType(try self._inferType(expression, typeEnv));
+}
+
+fn finalizeType(self: *TypeChecker, tp: *Type) *Type {
+    const resolved = self.applySubstitutions(tp);
+
+    switch (resolved.*) {
+        .Lambda => {
+            resolved.Lambda.argType = self.finalizeType(resolved.Lambda.argType);
+            resolved.Lambda.returnType = self.finalizeType(resolved.Lambda.returnType);
+        },
+        else => {},
+    }
+
+    return resolved;
+}
+
+fn freshWildcard(self: *TypeChecker) !*Type {
+    const wildcard = try self.makeFreshTypeSpecific(.{ .Wildcard = self.nextWildcardId });
+    self.nextWildcardId += 1;
+    return wildcard;
 }
 
 pub fn prettyPrint(allocator: std.mem.Allocator, tp: Type, level: u8) ![]const u8 {
@@ -97,7 +123,7 @@ pub fn prettyPrint(allocator: std.mem.Allocator, tp: Type, level: u8) ![]const u
         .Int => "int",
         .String => "string",
         // TODO: Add wildcard unifiable type names
-        .Wildcard => "_",
+        .Wildcard => |wild| std.fmt.allocPrint(allocator, "'{d}", .{wild}),
         .Lambda => |lam| {
             var buf = try std.ArrayList(u8).initCapacity(allocator, 0);
 
@@ -172,7 +198,7 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
         .Variable => |v| {
             const tp = environment.get(v);
 
-            if (tp) |val| return val;
+            if (tp) |val| return self.applySubstitutions(val);
             self.errorContext = .{
                 .UNBOUND_VARIABLE = .{
                     .variable = v,
@@ -181,10 +207,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
             return TypeError.UNBOUND_VARIABLE;
         },
         .Application => |app| {
-            const calleeType = try self._inferType(app.callee, environment);
+            const calleeType = self.applySubstitutions(try self._inferType(app.callee, environment));
 
-            const _argType = try self.makeFreshTypeSpecific(.Wildcard);
-            const _returnType = try self.makeFreshTypeSpecific(.Wildcard);
+            const _argType = try self.freshWildcard();
+            const _returnType = try self.freshWildcard();
 
             const lambdaType = try self.makeFreshTypeSpecific(.{ .Lambda = .{
                 .argType = _argType,
@@ -209,10 +235,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
 
             const valueType = try self._inferType(app.value, environment);
 
-            self.unifyTypes(valueType, calleeType.Lambda.argType) catch {
+            self.unifyTypes(valueType, _argType) catch {
                 self.errorContext = TypeErrorContext{
                     .UNEXPECTED_TYPE = .{
-                        .expectedType = self.allocator.dupe(Type, &[_]Type{calleeType.Lambda.argType.*}) catch {
+                        .expectedType = self.allocator.dupe(Type, &[_]Type{_argType.*}) catch {
                             return TypeError.OUT_OF_MEMORY;
                         },
                         .foundType = valueType.*,
@@ -223,11 +249,14 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
                 return TypeError.UNEXPECTED_TYPE;
             };
 
-            return calleeType.Lambda.returnType;
+            return _returnType;
         },
         .BinaryOperation => |bop| {
-            const leftType = try self._inferType(bop.left, environment);
-            const rightType = try self._inferType(bop.right, environment);
+            const rawLeft = try self._inferType(bop.left, environment);
+            const rawRight = try self._inferType(bop.right, environment);
+
+            const leftType = self.applySubstitutions(rawLeft);
+            const rightType = self.applySubstitutions(rawRight);
 
             return switch (bop.operation) {
                 .ADD, .SUBTRACT, .DIVIDE, .MULTIPLY, .GT, .GTEQ, .LT, .LTEQ => {
@@ -370,10 +399,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
         .Declaration => |decl| {
             const blockEnvironment = try TypeEnv.init(self.allocator, environment);
             if (decl.identifier[0] == '@') {
-                const freshWildcard = try self.makeFreshTypeSpecific(.Wildcard);
-                try blockEnvironment.add(decl.identifier, freshWildcard);
+                const identType = try self.freshWildcard();
+                try blockEnvironment.add(decl.identifier, identType);
                 const expressionType = try self._inferType(decl.expression, blockEnvironment);
-                try self.unifyTypes(freshWildcard, expressionType);
+                try self.unifyTypes(identType, expressionType);
 
                 return try self._inferType(decl.block, blockEnvironment);
             } else {
@@ -385,7 +414,7 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
         },
         .Lambda => |lam| {
             const closureEnvironment = try TypeEnv.init(self.allocator, environment);
-            const argumentType = try self.makeFreshTypeSpecific(.Wildcard);
+            const argumentType = try self.freshWildcard();
             try closureEnvironment.add(lam.identifier, argumentType);
 
             const bodyType = try self._inferType(lam.block, closureEnvironment);
@@ -401,53 +430,44 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
     }
 }
 
-fn unifyTypes(self: *TypeChecker, left: *Type, right: *Type) !void {
-    if (std.meta.activeTag(left.*) == std.meta.activeTag(right.*)) return;
+fn applySubstitutions(self: *TypeChecker, tp: *Type) *Type {
+    if (tp.* == .Wildcard)
+        if (self.substitutions.get(tp.Wildcard)) |resolvedType| {
+            const nestedType = self.applySubstitutions(resolvedType);
+            self.substitutions.put(tp.Wildcard, nestedType) catch {};
 
-    if (right.* == .Wildcard) return try self.unifyTypes(right, left);
-
-    if (left.* == .Wildcard) {
-        return switch (right.*) {
-            .Wildcard => unreachable,
-            .Boolean => {
-                left.* = .Boolean;
-                return;
-            },
-            .Float => {
-                left.* = .Float;
-                return;
-            },
-            .Int => {
-                left.* = .Int;
-                return;
-            },
-            .String => {
-                left.* = .String;
-                return;
-            },
-            .Lambda => |lam| {
-                const argType = try self.makeFreshTypeSpecific(.Wildcard);
-                try self.unifyTypes(argType, lam.argType);
-
-                const returnType = try self.makeFreshTypeSpecific(.Wildcard);
-                try self.unifyTypes(returnType, lam.returnType);
-
-                const lambdaType = try self.makeFreshTypeSpecific(.{ .Lambda = .{
-                    .argType = argType,
-                    .returnType = returnType,
-                } });
-
-                left.* = lambdaType.*;
-                // to try:
-                // left.* = right.*;
-                return;
-            },
+            return nestedType;
         };
+    return tp;
+}
+
+fn unifyTypes(self: *TypeChecker, rawLeft: *Type, rawRight: *Type) !void {
+    const left = self.applySubstitutions(rawLeft);
+    const right = self.applySubstitutions(rawRight);
+
+    if (std.meta.activeTag(left.*) == std.meta.activeTag(right.*)) {
+        if (left.* == .Wildcard and left.Wildcard == right.Wildcard) {
+            return;
+        }
+
+        if (left.* == .Lambda) {
+            try self.unifyTypes(left.Lambda.argType, right.Lambda.argType);
+            try self.unifyTypes(left.Lambda.returnType, right.Lambda.returnType);
+            return;
+        }
     }
 
-    if (left.* == .Lambda and right.* == .Lambda) {
-        try self.unifyTypes(left.Lambda.argType, right.Lambda.argType);
-        try self.unifyTypes(left.Lambda.returnType, right.Lambda.returnType);
+    if (left.* == .Wildcard) {
+        self.substitutions.put(left.Wildcard, right) catch {
+            return TypeError.OUT_OF_MEMORY;
+        };
+        return;
+    }
+
+    if (right.* == .Wildcard) {
+        self.substitutions.put(right.Wildcard, left) catch {
+            return TypeError.OUT_OF_MEMORY;
+        };
         return;
     }
 
