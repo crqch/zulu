@@ -151,7 +151,9 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
         .Not => |not| {
             const freshType = try self.makeFreshType();
             const tp = try self._inferType(not, environment);
-            if (tp.* != .Boolean) {
+
+            const booleanType = try self.makeFreshTypeSpecific(.Boolean);
+            self.unifyTypes(tp, booleanType) catch {
                 self.errorContext = .{
                     .UNEXPECTED_TYPE = .{
                         .expectedType = &[_]Type{
@@ -162,7 +164,7 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
                     },
                 };
                 return TypeError.UNEXPECTED_TYPE;
-            }
+            };
 
             freshType.* = .Boolean;
             return freshType;
