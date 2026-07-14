@@ -276,6 +276,7 @@ pub const Parser = struct {
                 fresh.* = Expression{ .Lambda = .{
                     .identifier = ident,
                     .block = block,
+                    .type = null,
                 } };
                 block = fresh;
             }

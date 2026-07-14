@@ -1,4 +1,5 @@
 const std = @import("std");
+const Type = @import("./typechecker.zig").Type;
 
 pub const Bop = enum {
     ADD,
@@ -38,6 +39,7 @@ pub const Expression = union(enum) {
     Lambda: struct {
         identifier: []const u8,
         block: *Expression,
+        type: ?*Type,
     },
     Application: struct {
         callee: *Expression,

@@ -2,6 +2,7 @@ const std = @import("std");
 const Interpreter = @This();
 const Expression = @import("./ast.zig").Expression;
 const Bop = @import("./ast.zig").Bop;
+const TypeChecker = @import("./typechecker.zig");
 
 allocator: std.mem.Allocator,
 last_expression: ?*Expression = null,
@@ -76,7 +77,7 @@ pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
         .Float => try std.fmt.allocPrint(allocator, "{d}", .{value.Float}),
         .Integer => try std.fmt.allocPrint(allocator, "{d}", .{value.Integer}),
         .String => try std.fmt.allocPrint(allocator, "{s}", .{value.String}),
-        .Closure => try std.fmt.allocPrint(allocator, "[lambda]", .{}),
+        .Closure => try std.fmt.allocPrint(allocator, "{s}", .{try TypeChecker.prettyPrint(allocator, value.Closure.node.Lambda.type.?.*, 0)}),
     };
 }
 

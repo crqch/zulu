@@ -6,7 +6,7 @@ const Expression = @import("./ast.zig").Expression;
 allocator: std.mem.Allocator,
 errorContext: ?TypeErrorContext,
 
-const Type = union(enum) {
+pub const Type = union(enum) {
     Int,
     Float,
     Boolean,
@@ -390,10 +390,13 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
 
             const bodyType = try self._inferType(lam.block, closureEnvironment);
 
-            return try self.makeFreshTypeSpecific(.{ .Lambda = .{
+            const lambdaType = try self.makeFreshTypeSpecific(.{ .Lambda = .{
                 .argType = argumentType,
                 .returnType = bodyType,
             } });
+
+            expression.*.Lambda.type = lambdaType;
+            return lambdaType;
         },
     }
 }
