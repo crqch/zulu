@@ -7,6 +7,7 @@ pub const Lexer = @import("./lexer.zig").Lexer;
 pub const Token = @import("./lexer.zig").Token;
 pub const Expression = @import("./ast.zig").Expression;
 pub const AstPrinter = @import("./ast.zig").AstPrinter;
+pub const TypeChecker = @import("./typechecker.zig");
 pub const Interpreter = @import("./interpreter.zig");
 
 pub const ansi = struct {
@@ -27,14 +28,18 @@ pub const Options = struct {
     @"halt-lexer": bool = false,
     @"debug-parser": bool = false,
     @"halt-parser": bool = false,
+    @"debug-type": bool = false,
+    @"halt-type": bool = false,
 
     pub const shorthands = .{
-        .t = "text",
+        .i = "text",
         .h = "help",
         .l = "debug-lexer",
         .L = "halt-lexer",
         .p = "debug-parser",
         .P = "halt-parser",
+        .t = "debug-type",
+        .T = "halt-type",
     };
 };
 

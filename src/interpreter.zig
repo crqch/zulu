@@ -311,6 +311,7 @@ const InterpreterError = error{
     UNBOUND_VARIABLE,
     ENVIRONMENT_MAP_ERROR,
     ENVIRONMENT_INITALIZATION_ERROR,
+    TYPE_PROMOTION_NOT_IMPLEMENTED,
 
     UNIMPLEMENTED,
 };
@@ -335,25 +336,27 @@ fn assertType(values: []const Value, valueTypes: []const ValueType) InterpreterE
 }
 
 fn castType(val1: *Value, val2: *Value) InterpreterError!void {
-    switch (val1.*) {
-        .Integer => |val_1| switch (val2.*) {
+    return switch (val1.*) {
+        .Integer => switch (val2.*) {
             .Integer => return,
-            .Float => {
-                val1.* = Value{
-                    .Float = @as(f64, @floatFromInt(val_1)),
-                };
-            },
+            .Float => return InterpreterError.TYPE_PROMOTION_NOT_IMPLEMENTED,
+            // .Float => {
+            //     val1.* = Value{
+            //         .Float = @as(f64, @floatFromInt(val_1)),
+            //     };
+            // },
             else => unreachable,
         },
         .Float => switch (val2.*) {
-            .Integer => |val_2| {
-                val2.* = Value{ .Float = @as(f64, @floatFromInt(val_2)) };
-            },
+            .Integer => return InterpreterError.TYPE_PROMOTION_NOT_IMPLEMENTED,
+            // .Integer => |val_2| {
+            //     val2.* = Value{ .Float = @as(f64, @floatFromInt(val_2)) };
+            // },
             .Float => return,
             else => unreachable,
         },
         else => unreachable,
-    }
+    };
 }
 
 fn numericOperation(comptime T: type, left: T, right: T, operation: Bop) InterpreterError!T {

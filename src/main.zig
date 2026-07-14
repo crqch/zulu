@@ -8,6 +8,8 @@ const Options = zulu.Options;
 const Lexer = zulu.Lexer;
 const Parser = zulu.Parser;
 const AstPrinter = zulu.AstPrinter;
+const TypeChecker = zulu.TypeChecker;
+const TypeError = zulu.TypeChecker.TypeError;
 const Interpreter = zulu.Interpreter;
 const ansi = zulu.ansi;
 const Token = zulu.Token;
@@ -74,7 +76,7 @@ pub fn main(init: std.process.Init) !void {
 fn printUsage() void {
     std.debug.print(ansi.bold ++ "Usage: zulu [options] <source | repl>\n\n" ++ ansi.reset, .{});
     std.debug.print("Options:\n", .{});
-    std.debug.print("  -t, --text             Take text input from positional argument\n", .{});
+    std.debug.print("  -i, --text             Take text input from positional argument\n", .{});
     std.debug.print("  -h, --help             Display this help message\n", .{});
 
     std.debug.print("\n" ++ ansi.blue ++ ansi.bold ++ "Debug options:\n" ++ ansi.reset, .{});
@@ -82,6 +84,8 @@ fn printUsage() void {
     std.debug.print("  -L, --halt-lexer       Stop after lexer\n", .{});
     std.debug.print("  -p, --debug-parser     Print parser output (AST)\n", .{});
     std.debug.print("  -P, --halt-parser      Stop after parser\n", .{});
+    std.debug.print("  -t, --debug-type       Print typechecker output (final program's type)\n", .{});
+    std.debug.print("  -T, --halt-type        Stop after typechecking\n", .{});
 }
 
 fn readFile(io: std.Io, arena: std.mem.Allocator, path: []const u8) ![]const u8 {
@@ -186,6 +190,43 @@ pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Optio
         return null;
     }
 
+    var typeArena = std.heap.ArenaAllocator.init(allocator);
+    defer typeArena.deinit();
+    const typeAllocator = typeArena.allocator();
+    var typeChecker = TypeChecker.init(typeAllocator);
+
+    const programType = typeChecker.inferType(expression) catch |err| {
+        switch (err) {
+            TypeError.UNEXPECTED_TYPE => {
+                std.debug.print(ansi.bold ++ ansi.red ++ "Type Error: Unexpected type\n" ++ ansi.reset, .{});
+                if (typeChecker.errorContext) |context| {
+                    if (findExprLocation(tokens, context.UNEXPECTED_TYPE.context)) |token| {
+                        printSourceHighlight(source, token.location.line, token.location.column, token.lexeme.len);
+                    }
+
+                    std.debug.print("Expected one of the following types:\n", .{});
+                    for (context.UNEXPECTED_TYPE.expectedType) |expectedType| {
+                        std.debug.print(ansi.blue ++ "\t{s}\n" ++ ansi.reset, .{try TypeChecker.prettyPrint(typeAllocator, expectedType, 0)});
+                    }
+                    std.debug.print("But got: " ++ ansi.blue ++ "{s}" ++ ansi.reset ++ "\n", .{try TypeChecker.prettyPrint(typeAllocator, context.UNEXPECTED_TYPE.foundType, 0)});
+                }
+            },
+            else => {
+                std.debug.print(ansi.bold ++ ansi.red ++ "Type Error: {}\n", .{err});
+            },
+        }
+        return null;
+    };
+    if (options.@"debug-type") {
+        std.debug.print(ansi.bold ++ ansi.green ++ "Typechecker output:\n" ++ ansi.reset, .{});
+        const printedType = try TypeChecker.prettyPrint(allocator, programType.*, 0);
+        std.debug.print("{s}\n", .{printedType});
+    }
+
+    if (options.@"halt-type") {
+        return null;
+    }
+
     var interpreter = Interpreter.init(allocator);
 
     const value = interpreter.eval(expression) catch |err| {
@@ -208,6 +249,9 @@ pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Optio
             },
             error.ENVIRONMENT_INITALIZATION_ERROR, error.ENVIRONMENT_MAP_ERROR, error.MEMORY_ALLOCATION_FAILED => {
                 std.debug.print("Memory allocation or environment initialization failed.\n", .{});
+            },
+            error.TYPE_PROMOTION_NOT_IMPLEMENTED => {
+                std.debug.print("Type promotion not implemented yet.\n", .{});
             },
             error.UNIMPLEMENTED => {
                 std.debug.print("Unimplemented feature encountered.\n", .{});
