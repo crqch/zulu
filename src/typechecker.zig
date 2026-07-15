@@ -294,20 +294,26 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
                 .ADD, .SUBTRACT, .DIVIDE, .MULTIPLY, .GT, .GTEQ, .LT, .LTEQ => {
                     const intType = try self.makeFreshTypeSpecific(.Int);
                     const floatType = try self.makeFreshTypeSpecific(.Float);
+                    const stringType = try self.makeFreshTypeSpecific(.String);
 
                     self.unifyTypes(leftType, intType) catch {
-                        self.unifyTypes(leftType, floatType) catch {};
+                        self.unifyTypes(leftType, floatType) catch {
+                            if (bop.operation == .ADD) {
+                                self.unifyTypes(leftType, stringType) catch {};
+                            }
+                        };
                     };
 
                     const resolvedLeftType = self.applySubstitutions(leftType);
 
-                    if (resolvedLeftType.* != .Int and resolvedLeftType.* != .Float) {
+                    if (resolvedLeftType.* != .Int and resolvedLeftType.* != .Float and (resolvedLeftType.* != .String or bop.operation != .ADD)) {
                         self.errorContext = TypeErrorContext{
                             .UNEXPECTED_TYPE = .{
-                                .expectedType = self.allocator.dupe(*Type, &[_]*Type{
+                                .expectedType = self.allocator.dupe(*Type, if (bop.operation == .ADD) &[_]*Type{
                                     intType,
                                     floatType,
-                                }) catch return TypeError.OUT_OF_MEMORY,
+                                    stringType,
+                                } else &[_]*Type{ intType, floatType }) catch return TypeError.OUT_OF_MEMORY,
                                 .foundType = leftType,
                                 .context = bop.left,
                             },

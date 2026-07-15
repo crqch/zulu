@@ -184,12 +184,17 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
 
             return switch (bop.operation) {
                 Bop.ADD, Bop.SUBTRACT, Bop.DIVIDE, Bop.MULTIPLY => {
-                    try assertType(&[_]Value{ left, right }, &[_]ValueType{ .Integer, .Float });
+                    if (bop.operation == .ADD) {
+                        try assertType(&[_]Value{ left, right }, &[_]ValueType{ .Integer, .Float, .String });
+                    } else {
+                        try assertType(&[_]Value{ left, right }, &[_]ValueType{ .Integer, .Float });
+                    }
                     try castType(&left, &right);
 
                     return switch (left) {
                         .Integer => Value{ .Integer = try numericOperation(i64, left.Integer, right.Integer, bop.operation) },
                         .Float => Value{ .Float = try numericOperation(f64, left.Float, right.Float, bop.operation) },
+                        .String => Value{ .String = std.fmt.allocPrint(self.allocator, "{s}{s}", .{ left.String, right.String }) catch return InterpreterError.MEMORY_ALLOCATION_FAILED },
                         else => unreachable,
                     };
                 },
@@ -356,6 +361,7 @@ fn castType(val1: *Value, val2: *Value) InterpreterError!void {
             .Float => return,
             else => unreachable,
         },
+        .String => {},
         else => unreachable,
     };
 }
