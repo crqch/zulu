@@ -2,6 +2,7 @@ const std = @import("std");
 const zulu = @import("zulu");
 
 const parser_tests = @import("./parser.zig");
+const typechecker_tests = @import("./typechecker.zig");
 
 const ansi = zulu.ansi;
 
@@ -27,6 +28,13 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.arena.allocator();
     const io = init.io;
 
+    std.debug.print(ansi.bold ++ ansi.blue ++ "Parser module tests" ++ ansi.reset ++ "\n", .{});
+
     var parser_tester = try parser_tests.Testing.init(allocator, io);
     try parser_tester.runTests();
+
+    std.debug.print(ansi.bold ++ ansi.blue ++ "Typechecker module tests" ++ ansi.reset ++ "\n", .{});
+
+    var typechecker_tester = try typechecker_tests.Testing.init(allocator, io);
+    try typechecker_tester.runTests();
 }
