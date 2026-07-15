@@ -74,8 +74,8 @@ const TypeErrorContext = union(enum) {
         variable: []const u8,
     },
     UNEXPECTED_TYPE: struct {
-        expectedType: []const Type,
-        foundType: Type,
+        expectedType: []const *Type,
+        foundType: *Type,
         context: *Expression,
     },
 };
@@ -96,7 +96,7 @@ pub fn inferType(self: *TypeChecker, expression: *Expression) TypeError!*Type {
     return self.finalizeType(try self._inferType(expression, typeEnv));
 }
 
-fn finalizeType(self: *TypeChecker, tp: *Type) *Type {
+pub fn finalizeType(self: *TypeChecker, tp: *Type) *Type {
     const resolved = self.applySubstitutions(tp);
 
     switch (resolved.*) {
@@ -182,10 +182,12 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
             self.unifyTypes(tp, booleanType) catch {
                 self.errorContext = .{
                     .UNEXPECTED_TYPE = .{
-                        .expectedType = &[_]Type{
-                            Type.Boolean,
+                        .expectedType = self.allocator.dupe(*Type, &[_]*Type{
+                            try self.makeFreshTypeSpecific(.Boolean),
+                        }) catch {
+                            return TypeError.OUT_OF_MEMORY;
                         },
-                        .foundType = tp.*,
+                        .foundType = tp,
                         .context = expression,
                     },
                 };
@@ -220,12 +222,12 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
             self.unifyTypes(calleeType, lambdaType) catch {
                 self.errorContext = TypeErrorContext{
                     .UNEXPECTED_TYPE = .{
-                        .expectedType = self.allocator.dupe(Type, &[_]Type{
-                            lambdaType.*,
+                        .expectedType = self.allocator.dupe(*Type, &[_]*Type{
+                            lambdaType,
                         }) catch {
                             return TypeError.OUT_OF_MEMORY;
                         },
-                        .foundType = calleeType.*,
+                        .foundType = calleeType,
                         .context = app.callee,
                     },
                 };
@@ -238,10 +240,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
             self.unifyTypes(valueType, _argType) catch {
                 self.errorContext = TypeErrorContext{
                     .UNEXPECTED_TYPE = .{
-                        .expectedType = self.allocator.dupe(Type, &[_]Type{_argType.*}) catch {
+                        .expectedType = self.allocator.dupe(*Type, &[_]*Type{_argType}) catch {
                             return TypeError.OUT_OF_MEMORY;
                         },
-                        .foundType = valueType.*,
+                        .foundType = valueType,
                         .context = app.value,
                     },
                 };
@@ -306,15 +308,15 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
                     if (leftType.* != .Boolean and leftType.* != .Float and leftType.* != .Int and leftType.* != .String) {
                         self.errorContext = TypeErrorContext{
                             .UNEXPECTED_TYPE = .{
-                                .expectedType = self.allocator.dupe(Type, &[_]Type{
-                                    Type{ .Boolean = {} },
-                                    Type{ .Float = {} },
-                                    Type{ .Int = {} },
-                                    Type{ .String = {} },
+                                .expectedType = self.allocator.dupe(*Type, &[_]*Type{
+                                    try self.makeFreshTypeSpecific(.Boolean),
+                                    try self.makeFreshTypeSpecific(.Float),
+                                    try self.makeFreshTypeSpecific(.Int),
+                                    try self.makeFreshTypeSpecific(.String),
                                 }) catch {
                                     return TypeError.OUT_OF_MEMORY;
                                 },
-                                .foundType = leftType.*,
+                                .foundType = leftType,
                                 .context = expression,
                             },
                         };
@@ -333,10 +335,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
                     self.unifyTypes(leftType, freshType) catch {
                         self.errorContext = TypeErrorContext{
                             .UNEXPECTED_TYPE = .{
-                                .expectedType = self.allocator.dupe(Type, &[_]Type{freshType.*}) catch {
+                                .expectedType = self.allocator.dupe(*Type, &[_]*Type{freshType}) catch {
                                     return TypeError.OUT_OF_MEMORY;
                                 },
-                                .foundType = leftType.*,
+                                .foundType = leftType,
                                 .context = expression,
                             },
                         };
@@ -345,10 +347,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
                     self.unifyTypes(rightType, freshType) catch {
                         self.errorContext = TypeErrorContext{
                             .UNEXPECTED_TYPE = .{
-                                .expectedType = self.allocator.dupe(Type, &[_]Type{freshType.*}) catch {
+                                .expectedType = self.allocator.dupe(*Type, &[_]*Type{freshType}) catch {
                                     return TypeError.OUT_OF_MEMORY;
                                 },
-                                .foundType = rightType.*,
+                                .foundType = rightType,
                                 .context = expression,
                             },
                         };
@@ -368,12 +370,12 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
             var booleanType = Type{ .Boolean = {} };
             self.unifyTypes(conditionType, &booleanType) catch {
                 self.errorContext = TypeErrorContext{ .UNEXPECTED_TYPE = .{
-                    .expectedType = self.allocator.dupe(Type, &[_]Type{
-                        Type{ .Boolean = {} },
+                    .expectedType = self.allocator.dupe(*Type, &[_]*Type{
+                        try self.makeFreshTypeSpecific(.Boolean),
                     }) catch {
                         return TypeError.OUT_OF_MEMORY;
                     },
-                    .foundType = conditionType.*,
+                    .foundType = conditionType,
                     .context = expression,
                 } };
                 return TypeError.UNEXPECTED_TYPE;
@@ -383,12 +385,12 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
 
             self.unifyTypes(satisfyType, elseType) catch {
                 self.errorContext = TypeErrorContext{ .UNEXPECTED_TYPE = .{
-                    .expectedType = self.allocator.dupe(Type, &[_]Type{
-                        satisfyType.*,
+                    .expectedType = self.allocator.dupe(*Type, &[_]*Type{
+                        satisfyType,
                     }) catch {
                         return TypeError.OUT_OF_MEMORY;
                     },
-                    .foundType = elseType.*,
+                    .foundType = elseType,
                     .context = cond.elseBlock,
                 } };
                 return TypeError.UNEXPECTED_TYPE;

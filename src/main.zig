@@ -206,9 +206,9 @@ pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Optio
 
                     std.debug.print("Expected one of the following types:\n", .{});
                     for (context.UNEXPECTED_TYPE.expectedType) |expectedType| {
-                        std.debug.print(ansi.blue ++ "\t{s}\n" ++ ansi.reset, .{try TypeChecker.prettyPrint(typeAllocator, expectedType, 0)});
+                        std.debug.print(ansi.blue ++ "\t{s}\n" ++ ansi.reset, .{try TypeChecker.prettyPrint(typeAllocator, typeChecker.finalizeType(expectedType).*, 0)});
                     }
-                    std.debug.print("But got: " ++ ansi.blue ++ "{s}" ++ ansi.reset ++ "\n", .{try TypeChecker.prettyPrint(typeAllocator, context.UNEXPECTED_TYPE.foundType, 0)});
+                    std.debug.print("But got: " ++ ansi.blue ++ "{s}" ++ ansi.reset ++ "\n", .{try TypeChecker.prettyPrint(typeAllocator, typeChecker.finalizeType(context.UNEXPECTED_TYPE.foundType).*, 0)});
                 }
             },
             else => {
