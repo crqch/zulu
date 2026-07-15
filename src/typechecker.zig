@@ -292,25 +292,43 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
 
             return switch (bop.operation) {
                 .ADD, .SUBTRACT, .DIVIDE, .MULTIPLY, .GT, .GTEQ, .LT, .LTEQ => {
-                    const intType = try self.makeFreshType();
-                    intType.* = .Int;
-                    if ((leftType.* != .Int and leftType.* != .Float)) {
-                        if (rightType.* != .Wildcard) {
-                            try self.unifyTypes(leftType, rightType);
-                        } else {
-                            try self.unifyTypes(leftType, intType);
-                        }
-                    }
-                    if ((rightType.* != .Int and rightType.* != .Float)) {
-                        if (leftType.* != .Wildcard) {
-                            try self.unifyTypes(rightType, leftType);
-                        } else {
-                            try self.unifyTypes(rightType, intType);
-                        }
+                    const intType = try self.makeFreshTypeSpecific(.Int);
+                    const floatType = try self.makeFreshTypeSpecific(.Float);
+
+                    self.unifyTypes(leftType, intType) catch {
+                        self.unifyTypes(leftType, floatType) catch {};
+                    };
+
+                    const resolvedLeftType = self.applySubstitutions(leftType);
+
+                    if (resolvedLeftType.* != .Int and resolvedLeftType.* != .Float) {
+                        self.errorContext = TypeErrorContext{
+                            .UNEXPECTED_TYPE = .{
+                                .expectedType = self.allocator.dupe(*Type, &[_]*Type{
+                                    intType,
+                                    floatType,
+                                }) catch return TypeError.OUT_OF_MEMORY,
+                                .foundType = leftType,
+                                .context = bop.left,
+                            },
+                        };
+
+                        return TypeError.UNEXPECTED_TYPE;
                     }
 
-                    if ((leftType.* == .Int and rightType.* == .Float) or
-                        (leftType.* == .Float and rightType.* == .Int)) return TypeError.TYPE_PROMOTION_NOT_IMPLEMENTED;
+                    self.unifyTypes(rightType, leftType) catch {
+                        self.errorContext = TypeErrorContext{
+                            .UNEXPECTED_TYPE = .{
+                                .expectedType = self.allocator.dupe(*Type, &[_]*Type{
+                                    leftType,
+                                }) catch return TypeError.OUT_OF_MEMORY,
+                                .foundType = rightType,
+                                .context = bop.right,
+                            },
+                        };
+
+                        return TypeError.UNEXPECTED_TYPE;
+                    };
 
                     // TODO: Type promotion
 
