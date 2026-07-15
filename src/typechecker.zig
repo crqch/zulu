@@ -116,21 +116,44 @@ fn freshWildcard(self: *TypeChecker) !*Type {
     return wildcard;
 }
 
+const WildcardPrinter = struct {
+    currentWildcardChar: u8 = 'a',
+    wildcardCharMap: std.AutoHashMap(usize, u8),
+
+    fn getChar(self: *WildcardPrinter, wildcardId: usize) !u8 {
+        if (self.wildcardCharMap.get(wildcardId)) |char| return char;
+
+        defer self.currentWildcardChar += 1;
+        try self.wildcardCharMap.put(wildcardId, self.currentWildcardChar);
+        return self.currentWildcardChar;
+    }
+};
+
 pub fn prettyPrint(allocator: std.mem.Allocator, tp: Type, level: u8) ![]const u8 {
+    var wildcardPrinter = WildcardPrinter{
+        .wildcardCharMap = std.AutoHashMap(usize, u8).init(allocator),
+    };
+
+    return try _prettyPrint(allocator, tp, level, &wildcardPrinter);
+}
+
+fn _prettyPrint(allocator: std.mem.Allocator, tp: Type, level: u8, wildcardPrinter: *WildcardPrinter) ![]const u8 {
     return switch (tp) {
         .Boolean => "bool",
         .Float => "float",
         .Int => "int",
         .String => "string",
-        // TODO: Add wildcard unifiable type names
-        .Wildcard => |wild| std.fmt.allocPrint(allocator, "'{d}", .{wild}),
+        .Wildcard => |wild| {
+            const char = try wildcardPrinter.getChar(wild);
+            return try std.fmt.allocPrint(allocator, "'{c}", .{char});
+        },
         .Lambda => |lam| {
             var buf = try std.ArrayList(u8).initCapacity(allocator, 0);
 
             if (level >= 1) {
-                try buf.print(allocator, "({s} -> {s})", .{ try prettyPrint(allocator, lam.argType.*, 1), try prettyPrint(allocator, lam.returnType.*, 0) });
+                try buf.print(allocator, "({s} -> {s})", .{ try _prettyPrint(allocator, lam.argType.*, 1, wildcardPrinter), try _prettyPrint(allocator, lam.returnType.*, 0, wildcardPrinter) });
             } else {
-                try buf.print(allocator, "{s} -> {s}", .{ try prettyPrint(allocator, lam.argType.*, 1), try prettyPrint(allocator, lam.returnType.*, 0) });
+                try buf.print(allocator, "{s} -> {s}", .{ try _prettyPrint(allocator, lam.argType.*, 1, wildcardPrinter), try _prettyPrint(allocator, lam.returnType.*, 0, wildcardPrinter) });
             }
             return buf.items;
         },
