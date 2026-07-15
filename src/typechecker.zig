@@ -447,31 +447,25 @@ fn unifyTypes(self: *TypeChecker, rawLeft: *Type, rawRight: *Type) !void {
     const left = self.applySubstitutions(rawLeft);
     const right = self.applySubstitutions(rawRight);
 
-    if (std.meta.activeTag(left.*) == std.meta.activeTag(right.*)) {
-        if (left.* == .Wildcard and left.Wildcard == right.Wildcard) {
-            return;
-        }
-
-        if (left.* == .Lambda) {
-            try self.unifyTypes(left.Lambda.argType, right.Lambda.argType);
-            try self.unifyTypes(left.Lambda.returnType, right.Lambda.returnType);
-            return;
-        }
+    if (left == right or (left.* == .Wildcard and right.* == .Wildcard and left.Wildcard == right.Wildcard)) {
+        return;
     }
 
     if (left.* == .Wildcard) {
-        self.substitutions.put(left.Wildcard, right) catch {
-            return TypeError.OUT_OF_MEMORY;
-        };
+        self.substitutions.put(left.Wildcard, right) catch return TypeError.OUT_OF_MEMORY;
         return;
     }
-
     if (right.* == .Wildcard) {
-        self.substitutions.put(right.Wildcard, left) catch {
-            return TypeError.OUT_OF_MEMORY;
-        };
+        self.substitutions.put(right.Wildcard, left) catch return TypeError.OUT_OF_MEMORY;
         return;
     }
 
-    return TypeError.CANNOT_UNIFY;
+    if (std.meta.activeTag(left.*) != std.meta.activeTag(right.*)) {
+        return TypeError.CANNOT_UNIFY;
+    }
+
+    if (left.* == .Lambda) {
+        try self.unifyTypes(left.Lambda.argType, right.Lambda.argType);
+        try self.unifyTypes(left.Lambda.returnType, right.Lambda.returnType);
+    }
 }
