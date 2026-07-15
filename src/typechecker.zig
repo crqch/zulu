@@ -129,36 +129,43 @@ const WildcardPrinter = struct {
     }
 };
 
-pub fn prettyPrint(allocator: std.mem.Allocator, tp: Type, level: u8) ![]const u8 {
-    var wildcardPrinter = WildcardPrinter{
-        .wildcardCharMap = std.AutoHashMap(usize, u8).init(allocator),
-    };
+pub const PrettyPrinter = struct {
+    allocator: std.mem.Allocator,
+    wildcardPrinter: WildcardPrinter,
 
-    return try _prettyPrint(allocator, tp, level, &wildcardPrinter);
-}
+    pub fn prettyPrint(allocator: std.mem.Allocator, tp: Type) ![]const u8 {
+        var prettyPrinter = PrettyPrinter{
+            .allocator = allocator,
+            .wildcardPrinter = WildcardPrinter{
+                .wildcardCharMap = std.AutoHashMap(usize, u8).init(allocator),
+            },
+        };
+        return prettyPrinter._prettyPrint(tp, 0);
+    }
 
-fn _prettyPrint(allocator: std.mem.Allocator, tp: Type, level: u8, wildcardPrinter: *WildcardPrinter) ![]const u8 {
-    return switch (tp) {
-        .Boolean => "bool",
-        .Float => "float",
-        .Int => "int",
-        .String => "string",
-        .Wildcard => |wild| {
-            const char = try wildcardPrinter.getChar(wild);
-            return try std.fmt.allocPrint(allocator, "'{c}", .{char});
-        },
-        .Lambda => |lam| {
-            var buf = try std.ArrayList(u8).initCapacity(allocator, 0);
+    fn _prettyPrint(self: *PrettyPrinter, tp: Type, level: u8) ![]const u8 {
+        return switch (tp) {
+            .Boolean => "bool",
+            .Float => "float",
+            .Int => "int",
+            .String => "string",
+            .Wildcard => |wild| {
+                const char = try self.wildcardPrinter.getChar(wild);
+                return try std.fmt.allocPrint(self.allocator, "'{c}", .{char});
+            },
+            .Lambda => |lam| {
+                var buf = try std.ArrayList(u8).initCapacity(self.allocator, 0);
 
-            if (level >= 1) {
-                try buf.print(allocator, "({s} -> {s})", .{ try _prettyPrint(allocator, lam.argType.*, 1, wildcardPrinter), try _prettyPrint(allocator, lam.returnType.*, 0, wildcardPrinter) });
-            } else {
-                try buf.print(allocator, "{s} -> {s}", .{ try _prettyPrint(allocator, lam.argType.*, 1, wildcardPrinter), try _prettyPrint(allocator, lam.returnType.*, 0, wildcardPrinter) });
-            }
-            return buf.items;
-        },
-    };
-}
+                if (level >= 1) {
+                    try buf.print(self.allocator, "({s} -> {s})", .{ try self._prettyPrint(lam.argType.*, 1), try self._prettyPrint(lam.returnType.*, 0) });
+                } else {
+                    try buf.print(self.allocator, "{s} -> {s}", .{ try self._prettyPrint(lam.argType.*, 1), try self._prettyPrint(lam.returnType.*, 0) });
+                }
+                return buf.items;
+            },
+        };
+    }
+};
 
 fn makeFreshType(self: *TypeChecker) !*Type {
     return self.allocator.create(Type) catch {

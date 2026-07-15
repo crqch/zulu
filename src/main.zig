@@ -206,9 +206,9 @@ pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Optio
 
                     std.debug.print("Expected one of the following types:\n", .{});
                     for (context.UNEXPECTED_TYPE.expectedType) |expectedType| {
-                        std.debug.print(ansi.blue ++ "\t{s}\n" ++ ansi.reset, .{try TypeChecker.prettyPrint(typeAllocator, typeChecker.finalizeType(expectedType).*, 0)});
+                        std.debug.print(ansi.blue ++ "\t{s}\n" ++ ansi.reset, .{try TypeChecker.PrettyPrinter.prettyPrint(typeAllocator, typeChecker.finalizeType(expectedType).*)});
                     }
-                    std.debug.print("But got: " ++ ansi.blue ++ "{s}" ++ ansi.reset ++ "\n", .{try TypeChecker.prettyPrint(typeAllocator, typeChecker.finalizeType(context.UNEXPECTED_TYPE.foundType).*, 0)});
+                    std.debug.print("But got: " ++ ansi.blue ++ "{s}" ++ ansi.reset ++ "\n", .{try TypeChecker.PrettyPrinter.prettyPrint(typeAllocator, typeChecker.finalizeType(context.UNEXPECTED_TYPE.foundType).*)});
                 }
             },
             else => {
@@ -219,7 +219,7 @@ pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Optio
     };
     if (options.@"debug-type") {
         std.debug.print(ansi.bold ++ ansi.green ++ "Typechecker output:\n" ++ ansi.reset, .{});
-        const printedType = try TypeChecker.prettyPrint(allocator, programType.*, 0);
+        const printedType = try TypeChecker.PrettyPrinter.prettyPrint(allocator, typeChecker.finalizeType(programType).*);
         std.debug.print("{s}\n", .{printedType});
     }
 
