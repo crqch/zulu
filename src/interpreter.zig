@@ -78,7 +78,7 @@ pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
         .Boolean => if (value.Boolean) "true" else "false",
         .Float => try std.fmt.allocPrint(allocator, "{d}", .{value.Float}),
         .Integer => try std.fmt.allocPrint(allocator, "{d}", .{value.Integer}),
-        .String => try std.fmt.allocPrint(allocator, "{s}", .{value.String}),
+        .String => try std.fmt.allocPrint(allocator, "\"{s}\"", .{value.String}),
         .Tuple => |values| {
             var str = try std.ArrayList(u8).initCapacity(allocator, 0);
 
@@ -92,7 +92,7 @@ pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
 
             return str.items;
         },
-        .Closure => try std.fmt.allocPrint(allocator, "{s}", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, value.Closure.node.Lambda.type.?.*)}),
+        .Closure => try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, value.Closure.node.Lambda.type.?.*)}),
     };
 }
 
