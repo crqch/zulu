@@ -1,0 +1,8 @@
+2 = 4 == 8
+---
+NUMBER ( 2 )
+EQ
+NUMBER ( 4 )
+EQEQ
+NUMBER ( 8 )
+EOF

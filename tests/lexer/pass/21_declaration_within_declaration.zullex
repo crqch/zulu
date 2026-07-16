@@ -1,0 +1,22 @@
+x=(y=20;2+y);y=20;x+y
+---
+IDENT ( x )
+EQ
+LPAR
+IDENT ( y )
+EQ
+NUMBER ( 20 )
+SEMICOLON
+NUMBER ( 2 )
+PLUS
+IDENT ( y )
+RPAR
+SEMICOLON
+IDENT ( y )
+EQ
+NUMBER ( 20 )
+SEMICOLON
+IDENT ( x )
+PLUS
+IDENT ( y )
+EOF

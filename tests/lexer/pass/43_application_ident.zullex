@@ -1,0 +1,18 @@
+f=[x;x*x];f (f 2)
+---
+IDENT ( f )
+EQ
+LBRA
+IDENT ( x )
+SEMICOLON
+IDENT ( x )
+ASTERISK
+IDENT ( x )
+RBRA
+SEMICOLON
+IDENT ( f )
+LPAR
+IDENT ( f )
+NUMBER ( 2 )
+RPAR
+EOF

@@ -1,0 +1,8 @@
+2 > true <= false
+---
+NUMBER ( 2 )
+GT
+KW_TRUE
+LTEQ
+KW_FALSE
+EOF

@@ -1,0 +1,18 @@
+[x;[x;x*2] x*x] 2
+---
+LBRA
+IDENT ( x )
+SEMICOLON
+LBRA
+IDENT ( x )
+SEMICOLON
+IDENT ( x )
+ASTERISK
+NUMBER ( 2 )
+RBRA
+IDENT ( x )
+ASTERISK
+IDENT ( x )
+RBRA
+NUMBER ( 2 )
+EOF

@@ -1,0 +1,6 @@
+"This is an example string \\n
+"
+---
+STRING ( "This is an example string \\n
+" )
+EOF

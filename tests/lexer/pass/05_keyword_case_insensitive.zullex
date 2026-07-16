@@ -1,0 +1,8 @@
+False + TRue + FALse
+---
+KW_FALSE
+PLUS
+KW_TRUE
+PLUS
+KW_FALSE
+EOF
