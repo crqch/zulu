@@ -145,6 +145,21 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 .Boolean = !notValue.Boolean,
             };
         },
+        .UnaryMinus => |unaryMinus| {
+            const notValue = try self._eval(unaryMinus, environment);
+
+            if (notValue != .Float and notValue != .Integer) return InterpreterError.UNEXPECTED_TYPE;
+
+            if (notValue == .Float) {
+                return Value{
+                    .Float = notValue.Float * -1,
+                };
+            } else {
+                return Value{
+                    .Integer = notValue.Integer * -1,
+                };
+            }
+        },
         .Declaration => |declaration| {
             var blockEnvironment = try Env.init(self.allocator, environment);
 

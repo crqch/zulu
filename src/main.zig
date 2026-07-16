@@ -341,6 +341,7 @@ fn findExprLocation(tokens: []const Token, expr: *Expression) ?Token {
         },
         .BinaryOperation => |bop| return findExprLocation(tokens, bop.left),
         .Not => |not| return findExprLocation(tokens, not),
+        .UnaryMinus => |unaryMinus| return findExprLocation(tokens, unaryMinus),
         .Condition => |cond| return findExprLocation(tokens, cond.expression),
         .Declaration => |decl| return findTokenByLexemePtr(tokens, decl.identifier),
         .Lambda => |lam| return findTokenByLexemePtr(tokens, lam.identifier),

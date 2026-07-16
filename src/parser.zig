@@ -113,13 +113,7 @@ fn boolNud(self: *Parser) ParserError!*Expression {
 }
 
 fn unaryMinusNud(self: *Parser) ParserError!*Expression {
-    return try self.newExpression(Expression{ .BinaryOperation = .{
-        .left = try self.newExpression(Expression{
-            .Number = "-1",
-        }),
-        .operation = Bop.MULTIPLY,
-        .right = try self.parseExpression(Precedence.unary),
-    } });
+    return try self.newExpression(Expression{ .UnaryMinus = try self.parseExpression(Precedence.unary) });
 }
 
 fn notNud(self: *Parser) ParserError!*Expression {
