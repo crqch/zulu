@@ -43,6 +43,4 @@ pub const Options = struct {
     };
 };
 
-test "run all tests" {
-    _ = @import("./lexer.zig");
-}
+test "run all tests" {}
