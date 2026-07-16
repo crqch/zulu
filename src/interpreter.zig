@@ -57,6 +57,7 @@ const ValueType = enum {
     Float,
     Boolean,
     String,
+    Tuple,
     Closure,
 };
 
@@ -65,6 +66,7 @@ pub const Value = union(ValueType) {
     Float: f64,
     Boolean: bool,
     String: []const u8,
+    Tuple: []Value,
     Closure: struct {
         node: *Expression,
         env: *Env,
@@ -77,6 +79,19 @@ pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
         .Float => try std.fmt.allocPrint(allocator, "{d}", .{value.Float}),
         .Integer => try std.fmt.allocPrint(allocator, "{d}", .{value.Integer}),
         .String => try std.fmt.allocPrint(allocator, "{s}", .{value.String}),
+        .Tuple => |values| {
+            var str = try std.ArrayList(u8).initCapacity(allocator, 0);
+
+            try str.print(allocator, "(", .{});
+            try str.print(allocator, "{s}", .{try printValue(allocator, values[0])});
+            for (values[1..]) |_val| {
+                try str.print(allocator, ", {s}", .{try printValue(allocator, _val)});
+            }
+
+            try str.print(allocator, ")", .{});
+
+            return str.items;
+        },
         .Closure => try std.fmt.allocPrint(allocator, "{s}", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, value.Closure.node.Lambda.type.?.*)}),
     };
 }
@@ -127,6 +142,17 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 return value;
             }
             return InterpreterError.UNBOUND_VARIABLE;
+        },
+        .Tuple => |expressions| {
+            var values = std.ArrayList(Value).initCapacity(self.allocator, expressions.len) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+
+            for (expressions) |ex| {
+                values.append(self.allocator, try self._eval(ex, environment)) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+            }
+
+            return Value{
+                .Tuple = values.items,
+            };
         },
         .Lambda => {
             return Value{

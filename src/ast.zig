@@ -32,6 +32,7 @@ pub const Expression = union(enum) {
     Number: []const u8,
     Boolean: bool,
     String: []const u8,
+    Tuple: []*Expression,
     Declaration: struct {
         identifier: []const u8,
         expression: *Expression,
@@ -104,6 +105,12 @@ pub const AstPrinter = struct {
             },
             .Boolean => |b| {
                 try self.buffer.print(self.allocator, "Boolean( {s} )\n", .{if (b) "True" else "False"});
+            },
+            .Tuple => |expressions| {
+                try self.buffer.print(self.allocator, "Tuple\n", .{});
+                for (expressions) |expression| {
+                    try self.printNode(expression.*, level + 1);
+                }
             },
             .Variable => |v| {
                 try self.buffer.print(self.allocator, "Variable( {s} )\n", .{v});

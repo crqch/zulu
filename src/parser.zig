@@ -16,14 +16,15 @@ tokens: []Token,
 const Precedence = struct {
     pub const none: u8 = 0;
     pub const assignment: u8 = 10; // =
-    pub const logic_or: u8 = 20; //   or
-    pub const logic_and: u8 = 30; //  and
-    pub const equality: u8 = 40; //   ==, !=
-    pub const comparison: u8 = 50; // <, >, <=, >=
-    pub const term: u8 = 60; //       +, -
-    pub const factor: u8 = 70; //     *, /
-    pub const unary: u8 = 80; //      !, -
-    pub const call: u8 = 90; //       (), application
+    pub const tuple: u8 = 20; //      ,
+    pub const logic_or: u8 = 30; //   or
+    pub const logic_and: u8 = 40; //  and
+    pub const equality: u8 = 50; //   ==, !=
+    pub const comparison: u8 = 60; // <, >, <=, >=
+    pub const term: u8 = 70; //       +, -
+    pub const factor: u8 = 80; //     *, /
+    pub const unary: u8 = 90; //      !, -
+    pub const call: u8 = 100; //       (), application
 };
 
 pub const ParserError = error{
@@ -58,7 +59,7 @@ pub fn parse(self: *Parser) ParserError!*Expression {
 fn parseExpression(self: *Parser, minBp: u8) ParserError!*Expression {
     var left = try self.nud();
 
-    while (true) {
+    while (self.current < self.tokens.len) {
         if (self.isAtPrimaryStart() and Precedence.call > minBp) {
             left = try self.applicationLed(left);
             continue;
@@ -191,6 +192,7 @@ fn led(tokenType: TokenType) ?InfixParselet {
         .EQ => .{ .precedence = Precedence.assignment, .led = binOpLed },
         .KW_AND => .{ .precedence = Precedence.logic_and, .led = binOpLed },
         .KW_OR => .{ .precedence = Precedence.logic_or, .led = binOpLed },
+        .COMMA => .{ .precedence = Precedence.tuple, .led = tupleLed },
         else => null,
     };
 }
@@ -231,6 +233,31 @@ fn binOpLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*Expression
     });
 }
 
+fn tupleLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*Expression {
+    var expressionsArray = std.ArrayList(*Expression).initCapacity(self.allocator, 0) catch return ParserError.OUT_OF_MEMORY;
+
+    expressionsArray.append(self.allocator, left) catch return ParserError.OUT_OF_MEMORY;
+
+    self.current -= 1;
+
+    while (self.matchToken(.COMMA)) {
+        const saved_pos = self.current;
+
+        const next = self.parseExpression(minBp) catch |err| {
+            if (err == ParserError.EXPECTED_EXPRESSION) {
+                self.current = saved_pos;
+                break;
+            }
+            return err;
+        };
+        expressionsArray.append(self.allocator, next) catch return ParserError.OUT_OF_MEMORY;
+    }
+
+    return try self.newExpression(.{
+        .Tuple = expressionsArray.items,
+    });
+}
+
 fn matchToken(self: *Parser, tokenType: TokenType) bool {
     if (self.current >= self.tokens.len) return false;
     if (self.tokens[self.current].type == tokenType) {
@@ -241,12 +268,14 @@ fn matchToken(self: *Parser, tokenType: TokenType) bool {
 }
 
 fn isAtPrimaryStart(self: *Parser) bool {
+    if (self.current >= self.tokens.len) return false;
     const token = self.tokens[self.current];
     const tokenType = token.type;
     return tokenType == .NUMBER or
         tokenType == .STRING or
         tokenType == .KW_TRUE or
         tokenType == .KW_FALSE or
+        tokenType == .KW_IF or
         tokenType == .LPAR or
         tokenType == .LBRA or
         tokenType == .BANG or

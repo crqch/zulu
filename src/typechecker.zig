@@ -14,6 +14,7 @@ pub const Type = union(enum) {
     Float,
     Boolean,
     String,
+    Tuple: []*Type,
     Lambda: struct {
         argType: *Type,
         returnType: *Type,
@@ -149,6 +150,25 @@ pub const PrettyPrinter = struct {
             .Float => "float",
             .Int => "int",
             .String => "string",
+            .Tuple => |types| {
+                var str = std.ArrayList(u8).initCapacity(self.allocator, (types.len - 1) * 3) catch return TypeError.OUT_OF_MEMORY;
+
+                if (level >= 11) {
+                    str.print(self.allocator, "(", .{}) catch return TypeError.OUT_OF_MEMORY;
+                }
+
+                str.print(self.allocator, "{s}", .{try self._prettyPrint(types[0].*, 11)}) catch return TypeError.OUT_OF_MEMORY;
+
+                for (types[1..]) |_tp| {
+                    str.print(self.allocator, " * {s}", .{try self._prettyPrint(_tp.*, 11)}) catch return TypeError.OUT_OF_MEMORY;
+                }
+
+                if (level >= 11) {
+                    str.print(self.allocator, ")", .{}) catch return TypeError.OUT_OF_MEMORY;
+                }
+
+                return str.items;
+            },
             .Wildcard => |wild| {
                 const char = try self.wildcardPrinter.getChar(wild);
                 return try std.fmt.allocPrint(self.allocator, "'{c}", .{char});
@@ -203,6 +223,15 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
             const freshType = try self.makeFreshType();
             freshType.* = .String;
             return freshType;
+        },
+        .Tuple => |expressions| {
+            var types = std.ArrayList(*Type).initCapacity(self.allocator, expressions.len) catch return TypeError.OUT_OF_MEMORY;
+
+            for (expressions) |expr| {
+                types.append(self.allocator, try self._inferType(expr, environment)) catch return TypeError.OUT_OF_MEMORY;
+            }
+
+            return try self.makeFreshTypeSpecific(.{ .Tuple = types.items });
         },
         .Not => |not| {
             const freshType = try self.makeFreshType();

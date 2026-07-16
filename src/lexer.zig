@@ -18,6 +18,7 @@ pub const TokenType = enum {
     SLASH,
     ASTERISK,
     DOT,
+    COMMA,
     NOTEQ,
     EQ,
     GT,
@@ -108,11 +109,12 @@ pub fn printTokens(self: *Lexer) LexerError![]const u8 {
 fn scanToken(self: *Lexer) LexerError!void {
     const char = self.advance();
     switch (char) {
-        '+', '-', '/', '*', '=', '!', '(', ')', '[', ']', ';', '>', '<' => {
+        '+', '-', '/', '*', '=', '!', '(', ')', '[', ']', ',', ';', '>', '<' => {
             return try self.addToken(switch (char) {
                 '+' => .PLUS,
                 '-' => .MINUS,
                 '*' => .ASTERISK,
+                ',' => .COMMA,
                 '/' => if (self.match('/')) .SLASHSLASH else .SLASH,
                 '>' => if (self.match('=')) .GTEQ else .GT,
                 '<' => if (self.match('=')) .LTEQ else .LT,

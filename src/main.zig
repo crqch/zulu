@@ -345,6 +345,7 @@ fn findExprLocation(tokens: []const Token, expr: *Expression) ?Token {
         .Condition => |cond| return findExprLocation(tokens, cond.expression),
         .Declaration => |decl| return findTokenByLexemePtr(tokens, decl.identifier),
         .Lambda => |lam| return findTokenByLexemePtr(tokens, lam.identifier),
+        .Tuple => |val| return findExprLocation(tokens, val[0]),
         .Application => |app| return findExprLocation(tokens, app.callee),
     }
 }
