@@ -144,15 +144,6 @@ pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Optio
             error.EXPECTED_VARIABLE_AT_DECLARATION => {
                 std.debug.print("Expected variable identifier in declaration at line {}, column {}.\n", .{ token.location.line, token.location.column });
             },
-            error.EXPECTED_LEFT_PARENTHESES => {
-                std.debug.print("Expected '(' after 'if' at line {}, column {}.\n", .{ token.location.line, token.location.column });
-            },
-            error.EXPECTED_RIGHT_PARENTHESES => {
-                std.debug.print("Expected ')' after condition at line {}, column {}.\n", .{ token.location.line, token.location.column });
-            },
-            error.EXPECTED_ELSE_KEYWORD => {
-                std.debug.print("Expected 'else' keyword at line {}, column {}.\n", .{ token.location.line, token.location.column });
-            },
             error.LAMBDA_UNRESOLVED => {
                 std.debug.print("Unresolved lambda syntax at line {}, column {}.\n", .{ token.location.line, token.location.column });
             },
@@ -164,9 +155,6 @@ pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Optio
             },
             error.UNKNOWN_ESCAPE_CHARACTER => {
                 std.debug.print("Unknown escape character in string literal at line {}, column {}.\n", .{ token.location.line, token.location.column });
-            },
-            error.EXPECTED_BOP => {
-                std.debug.print("Expected binary operator at line {}, column {}.\n", .{ token.location.line, token.location.column });
             },
             error.NOT_A_BINARY_OPERATION => {
                 std.debug.print("Invalid binary operation at line {}, column {}.\n", .{ token.location.line, token.location.column });
