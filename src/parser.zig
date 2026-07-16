@@ -2,6 +2,7 @@ const std = @import("std");
 
 const ast = @import("ast.zig");
 const Expression = ast.Expression;
+const MatchPattern = ast.MatchPattern;
 const Bop = ast.Bop;
 const lexer = @import("lexer.zig");
 const Token = lexer.Token;
@@ -15,6 +16,7 @@ tokens: []Token,
 
 const Precedence = struct {
     pub const none: u8 = 0;
+    pub const arrow: u8 = 5; //       =>
     pub const assignment: u8 = 10; // =
     pub const tuple: u8 = 20; //      ,
     pub const logic_or: u8 = 30; //   or
@@ -37,6 +39,7 @@ pub const ParserError = error{
     NOT_A_BINARY_OPERATION,
     OUT_OF_MEMORY,
     UNEXPECTED_TOKEN,
+    PATTERN_EXPECTED,
 };
 
 const PrefixParselet = *const fn (self: *Parser) ParserError!*Expression;
@@ -85,8 +88,76 @@ fn nud(self: *Parser) ParserError!*Expression {
         .LPAR => self.groupNud(),
         .LBRA => self.lambdaNud(),
         .KW_IF => self.ifNud(),
+        .KW_MATCH => self.matchNud(),
         else => error.EXPECTED_EXPRESSION,
     };
+}
+
+fn matchNud(self: *Parser) ParserError!*Expression {
+    const scrutinee = try self.parseExpression(Precedence.none);
+
+    var patternsArray = std.ArrayList(ast.MatchCase).initCapacity(self.allocator, 0) catch return ParserError.OUT_OF_MEMORY;
+
+    while (self.matchToken(.PIPE)) {
+        const pattern = try self.parsePattern();
+
+        try self.expect(.ARROW);
+
+        const block = try self.parseExpression(Precedence.none);
+
+        patternsArray.append(self.allocator, .{
+            .pattern = pattern,
+            .block = block,
+        }) catch return ParserError.OUT_OF_MEMORY;
+    }
+
+    return try self.newExpression(.{ .Match = .{
+        .scrutinee = scrutinee,
+        .cases = patternsArray.items,
+    } });
+}
+
+fn parsePattern(self: *Parser) ParserError!*MatchPattern {
+    var leftPattern = try self.parsePrimaryPattern();
+
+    if (self.matchToken(.COMMA)) {
+        var tupleElements = std.ArrayList(*MatchPattern).initCapacity(self.allocator, 0) catch return ParserError.OUT_OF_MEMORY;
+        tupleElements.append(self.allocator, leftPattern) catch return ParserError.OUT_OF_MEMORY;
+
+        while (true) {
+            const nextPattern = try self.parsePrimaryPattern();
+            tupleElements.append(self.allocator, nextPattern) catch return ParserError.OUT_OF_MEMORY;
+
+            if (!self.matchToken(.COMMA)) break;
+        }
+
+        leftPattern = try self.newMatchPattern(.{
+            .Tuple = .{ .binds = tupleElements.items },
+        });
+    }
+
+    return leftPattern;
+}
+
+fn parsePrimaryPattern(self: *Parser) ParserError!*MatchPattern {
+    const token = self.tokens[self.current];
+    if (self.matchToken(.IDENT)) {
+        if (std.mem.eql(u8, token.lexeme, "_")) {
+            return try self.newMatchPattern(.Wildcard);
+        }
+        return try self.newMatchPattern(.{ .Identifier = token.lexeme });
+    } else if (self.matchToken(.LPAR)) {
+        const pattern = try self.parsePattern();
+        try self.expect(.RPAR);
+        return pattern;
+    }
+    return ParserError.PATTERN_EXPECTED;
+}
+
+fn newMatchPattern(self: *Parser, data: MatchPattern) ParserError!*MatchPattern {
+    const matchPattern = self.allocator.create(MatchPattern) catch return ParserError.OUT_OF_MEMORY;
+    matchPattern.* = data;
+    return matchPattern;
 }
 
 fn numberNud(self: *Parser) ParserError!*Expression {

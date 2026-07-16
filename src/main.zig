@@ -169,9 +169,9 @@ pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Optio
                     std.debug.print("Unexpected token '{s}' at line {}, column {}.\n", .{ token.lexeme, token.location.line, token.location.column });
                 }
             },
-            // else => {
-            //     std.debug.print("Unexpected parsing error: {s}\n", .{@errorName(err)});
-            // },
+            else => {
+                std.debug.print("Unexpected parsing error: {s}\n", .{@errorName(err)});
+            },
         }
         printSourceHighlight(source, token.location.line, token.location.column, token.lexeme.len);
         return err;
@@ -345,6 +345,7 @@ fn findExprLocation(tokens: []const Token, expr: *Expression) ?Token {
         .Condition => |cond| return findExprLocation(tokens, cond.expression),
         .Declaration => |decl| return findTokenByLexemePtr(tokens, decl.identifier),
         .Lambda => |lam| return findTokenByLexemePtr(tokens, lam.identifier),
+        .Match => |mat| return findExprLocation(tokens, mat.scrutinee),
         .Tuple => |val| return findExprLocation(tokens, val[0]),
         .Application => |app| return findExprLocation(tokens, app.callee),
     }

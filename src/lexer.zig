@@ -24,6 +24,7 @@ pub const TokenType = enum {
     GT,
     LT,
     BANG,
+    PIPE,
     SEMICOLON,
 
     GTEQ,
@@ -31,6 +32,8 @@ pub const TokenType = enum {
     NOTEQEQ,
     EQEQ,
     SLASHSLASH,
+
+    ARROW,
 
     LPAR,
     RPAR,
@@ -48,6 +51,7 @@ pub const TokenType = enum {
     KW_FALSE,
     KW_IF,
     KW_ELSE,
+    KW_MATCH,
 
     EOF,
 };
@@ -65,6 +69,7 @@ const keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "false", .KW_FALSE },
     .{ "if", .KW_IF },
     .{ "else", .KW_ELSE },
+    .{ "match", .KW_MATCH },
     .{ "and", .KW_AND },
     .{ "or", .KW_OR },
 });
@@ -109,16 +114,17 @@ pub fn printTokens(self: *Lexer) LexerError![]const u8 {
 fn scanToken(self: *Lexer) LexerError!void {
     const char = self.advance();
     switch (char) {
-        '+', '-', '/', '*', '=', '!', '(', ')', '[', ']', ',', ';', '>', '<' => {
+        '+', '-', '/', '*', '=', '!', '|', '(', ')', '[', ']', ',', ';', '>', '<' => {
             return try self.addToken(switch (char) {
                 '+' => .PLUS,
                 '-' => .MINUS,
                 '*' => .ASTERISK,
                 ',' => .COMMA,
+                '|' => .PIPE,
                 '/' => if (self.match('/')) .SLASHSLASH else .SLASH,
                 '>' => if (self.match('=')) .GTEQ else .GT,
                 '<' => if (self.match('=')) .LTEQ else .LT,
-                '=' => if (self.match('=')) .EQEQ else .EQ,
+                '=' => if (self.match('=')) .EQEQ else if (self.match('>')) .ARROW else .EQ,
                 '!' => if (self.match('='))
                     (if (self.match('=')) .NOTEQEQ else .NOTEQ)
                 else

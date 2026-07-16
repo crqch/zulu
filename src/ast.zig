@@ -20,6 +20,23 @@ pub const Bop = enum {
     AND,
 };
 
+pub const MatchPattern = union(enum) {
+    Identifier: []const u8,
+    Cons: struct {
+        head: *MatchPattern,
+        rest: *MatchPattern,
+    },
+    Tuple: struct {
+        binds: []*MatchPattern,
+    },
+    Wildcard,
+};
+
+pub const MatchCase = struct {
+    pattern: *MatchPattern,
+    block: *Expression,
+};
+
 pub const Expression = union(enum) {
     BinaryOperation: struct {
         operation: Bop,
@@ -42,6 +59,10 @@ pub const Expression = union(enum) {
         identifier: []const u8,
         block: *Expression,
         type: ?*Type,
+    },
+    Match: struct {
+        scrutinee: *Expression,
+        cases: []MatchCase,
     },
     Application: struct {
         callee: *Expression,
@@ -129,6 +150,18 @@ pub const AstPrinter = struct {
                 try self.printNode(condition.satisfyBlock.*, level + 1);
                 try self.printNode(condition.elseBlock.*, level + 1);
             },
+            .Match => |match| {
+                try self.buffer.print(self.allocator, "Match\n", .{});
+
+                try self.printNode(match.scrutinee.*, level + 1);
+
+                for (match.cases) |case| {
+                    try self.buffer.appendNTimes(self.allocator, ' ', level + 1);
+                    try self.buffer.print(self.allocator, "Case\n", .{});
+                    try self.printPattern(case.pattern.*, level + 2);
+                    try self.printNode(case.block.*, level + 2);
+                }
+            },
             .Not => |not| {
                 try self.buffer.print(self.allocator, "Not\n", .{});
 
@@ -138,6 +171,30 @@ pub const AstPrinter = struct {
                 try self.buffer.print(self.allocator, "UnaryMinus\n", .{});
 
                 try self.printNode(opposite.*, level + 1);
+            },
+        }
+    }
+
+    fn printPattern(self: *AstPrinter, pattern: MatchPattern, level: usize) !void {
+        try self.buffer.appendNTimes(self.allocator, ' ', level);
+        try self.buffer.append(self.allocator, '|');
+        switch (pattern) {
+            .Cons => |cons| {
+                try self.buffer.print(self.allocator, "Cons\n", .{});
+                try self.printPattern(cons.head.*, level + 1);
+                try self.printPattern(cons.rest.*, level + 1);
+            },
+            .Wildcard => {
+                try self.buffer.print(self.allocator, "Wildcard\n", .{});
+            },
+            .Identifier => |ident| {
+                try self.buffer.print(self.allocator, "Identifier ( {s} )\n", .{ident});
+            },
+            .Tuple => |patterns| {
+                try self.buffer.print(self.allocator, "Tuple\n", .{});
+                for (patterns.binds) |_pattern| {
+                    try self.printPattern(_pattern.*, level + 1);
+                }
             },
         }
     }
