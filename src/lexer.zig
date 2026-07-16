@@ -66,10 +66,11 @@ const keywords = std.StaticStringMap(TokenType).initComptime(.{
 pub const LexerError = error{
     UNMATCHED_TOKEN,
     UNTERMINATED_STRING_LITERAL,
-} || std.mem.Allocator.Error;
+    OUT_OF_MEMORY,
+};
 
 pub fn init(allocator: std.mem.Allocator, source: []const u8) !Lexer {
-    return Lexer{ .allocator = allocator, .tokens = try std.ArrayList(Token).initCapacity(allocator, 0), .source = source };
+    return Lexer{ .allocator = allocator, .tokens = std.ArrayList(Token).initCapacity(allocator, 0) catch return LexerError.OUT_OF_MEMORY, .source = source };
 }
 
 pub fn deinit(self: *Lexer) void {
@@ -126,7 +127,7 @@ fn scanToken(self: *Lexer) LexerError!void {
                 } else {
                     self.column += 1;
                 }
-            } else return error.UNMATCHED_TOKEN;
+            } else return LexerError.UNMATCHED_TOKEN;
         },
     }
 }
@@ -136,13 +137,13 @@ fn number(self: *Lexer, char: u8) LexerError!void {
     while (!self.isAtEnd() and std.ascii.isDigit(self.peek())) self.skip();
 
     if (!self.isAtEnd() and self.peek() == '.') {
-        if (point) return error.UNMATCHED_TOKEN;
+        if (point) return LexerError.UNMATCHED_TOKEN;
         point = true;
         self.skip();
         while (!self.isAtEnd() and std.ascii.isDigit(self.peek())) self.skip();
     }
 
-    if (!self.isAtEnd() and self.peek() == '.') return error.UNMATCHED_TOKEN;
+    if (!self.isAtEnd() and self.peek() == '.') return LexerError.UNMATCHED_TOKEN;
 
     try self.addToken(.NUMBER);
 }
@@ -163,7 +164,7 @@ fn string(self: *Lexer) LexerError!void {
         self.skip();
     }
 
-    if (self.isAtEnd() and self.source[self.current - 1] != '"') return error.UNTERMINATED_STRING_LITERAL;
+    if (self.isAtEnd() and self.source[self.current - 1] != '"') return LexerError.UNTERMINATED_STRING_LITERAL;
 
     self.skip();
 
@@ -199,7 +200,7 @@ fn skip(self: *Lexer) void {
 }
 
 fn addToken(self: *Lexer, tp: TokenType) LexerError!void {
-    try self.tokens.append(self.allocator, Token{ .type = tp, .lexeme = self.source[self.start..self.current], .location = Location{ .column = self.column, .line = self.line } });
+    self.tokens.append(self.allocator, Token{ .type = tp, .lexeme = self.source[self.start..self.current], .location = Location{ .column = self.column, .line = self.line } }) catch return LexerError.OUT_OF_MEMORY;
     self.column += self.current - self.start;
 }
 
@@ -211,8 +212,8 @@ fn isValidIdentChar(char: u8) bool {
     return (std.ascii.isAlphabetic(char) or char == '@' or char == '#' or char == '_');
 }
 
-fn lowerOfString(allocator: std.mem.Allocator, str: []const u8) ![]u8 {
-    var t = try allocator.alloc(u8, str.len);
+fn lowerOfString(allocator: std.mem.Allocator, str: []const u8) LexerError![]u8 {
+    var t = allocator.alloc(u8, str.len) catch return LexerError.OUT_OF_MEMORY;
 
     for (str, 0..) |char, i| {
         t[i] = std.ascii.toLower(char);
