@@ -200,6 +200,7 @@ fn peek(self: *Lexer) u8 {
 }
 
 fn match(self: *Lexer, char: u8) bool {
+    if (self.isAtEnd()) return false;
     if (self.peek() == char) {
         self.current += 1;
         return true;
