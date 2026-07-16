@@ -1,5 +1,4 @@
 const std = @import("std");
-const testing = std.testing;
 
 const Lexer = @This();
 
@@ -239,33 +238,3 @@ fn lowerOfString(allocator: std.mem.Allocator, str: []const u8) LexerError![]u8 
 
     return t;
 }
-
-const Testing = struct {
-    cases: []const TestCase,
-
-    pub const TestCase = struct {
-        source: []const u8,
-        expected: []const struct {
-            type: TokenType,
-            lexeme: []const u8,
-        },
-    };
-
-    pub fn init(_cases: []const TestCase) Testing {
-        return Testing{ .cases = _cases };
-    }
-
-    pub fn runTests(self: *Testing) !void {
-        for (self.cases) |case| {
-            var lexer = try Lexer.init(std.testing.allocator, case.source);
-            defer lexer.deinit();
-            const tokens = try lexer.scanTokens();
-
-            for (case.expected, tokens) |expected_token, token| {
-                try testing.expectEqual(expected_token.type, token.type);
-
-                try testing.expectEqualStrings(expected_token.lexeme, token.lexeme);
-            }
-        }
-    }
-};
