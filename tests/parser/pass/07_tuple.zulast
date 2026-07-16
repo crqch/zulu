@@ -1,0 +1,18 @@
+2,true,(if(true) 42 else 12),[a;a],(b=42;b),(13,7,5.6)
+---
+Tuple
+ Number( 2 )
+ Boolean( True )
+ Condition
+  Boolean( True )
+  Number( 42 )
+  Number( 12 )
+ Lambda ( a )
+  Variable( a )
+ Declaration ( b )
+  Number( 42 )
+  Variable( b )
+ Tuple
+  Number( 13 )
+  Number( 7 )
+  Number( 5.6 )

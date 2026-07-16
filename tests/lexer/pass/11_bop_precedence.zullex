@@ -1,8 +1,10 @@
-2 + x * 8
+2 + x * 8 , 5
 ---
 NUMBER ( 2 )
 PLUS
 IDENT ( x )
 ASTERISK
 NUMBER ( 8 )
+COMMA
+NUMBER ( 5 )
 EOF
