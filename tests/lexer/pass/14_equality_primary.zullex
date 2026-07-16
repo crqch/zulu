@@ -1,0 +1,10 @@
+2 = (4 == 8)
+---
+NUMBER ( 2 )
+EQ
+LPAR
+NUMBER ( 4 )
+EQEQ
+NUMBER ( 8 )
+RPAR
+EOF

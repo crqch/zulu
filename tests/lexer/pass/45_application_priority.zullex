@@ -1,0 +1,15 @@
+f=[a;a+a] 2;x
+---
+IDENT ( f )
+EQ
+LBRA
+IDENT ( a )
+SEMICOLON
+IDENT ( a )
+PLUS
+IDENT ( a )
+RBRA
+NUMBER ( 2 )
+SEMICOLON
+IDENT ( x )
+EOF

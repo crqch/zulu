@@ -1,0 +1,14 @@
+[x y z;x + y * z]
+---
+LBRA
+IDENT ( x )
+IDENT ( y )
+IDENT ( z )
+SEMICOLON
+IDENT ( x )
+PLUS
+IDENT ( y )
+ASTERISK
+IDENT ( z )
+RBRA
+EOF

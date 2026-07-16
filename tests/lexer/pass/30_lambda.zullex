@@ -1,0 +1,12 @@
+[x;x*x+42]
+---
+LBRA
+IDENT ( x )
+SEMICOLON
+IDENT ( x )
+ASTERISK
+IDENT ( x )
+PLUS
+NUMBER ( 42 )
+RBRA
+EOF

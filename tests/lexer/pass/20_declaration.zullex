@@ -1,0 +1,14 @@
+x=10;y=20;x+y
+---
+IDENT ( x )
+EQ
+NUMBER ( 10 )
+SEMICOLON
+IDENT ( y )
+EQ
+NUMBER ( 20 )
+SEMICOLON
+IDENT ( x )
+PLUS
+IDENT ( y )
+EOF

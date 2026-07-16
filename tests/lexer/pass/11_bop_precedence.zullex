@@ -1,0 +1,8 @@
+2 + x * 8
+---
+NUMBER ( 2 )
+PLUS
+IDENT ( x )
+ASTERISK
+NUMBER ( 8 )
+EOF

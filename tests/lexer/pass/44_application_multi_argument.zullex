@@ -1,0 +1,17 @@
+[x y z; x + y * z] 10 20 30
+---
+LBRA
+IDENT ( x )
+IDENT ( y )
+IDENT ( z )
+SEMICOLON
+IDENT ( x )
+PLUS
+IDENT ( y )
+ASTERISK
+IDENT ( z )
+RBRA
+NUMBER ( 10 )
+NUMBER ( 20 )
+NUMBER ( 30 )
+EOF
