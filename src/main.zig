@@ -125,9 +125,8 @@ pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Optio
 
     if (options.@"debug-lexer") {
         std.debug.print(ansi.bold ++ ansi.green ++ "Lexer output:\n" ++ ansi.reset, .{});
-        for (tokens) |token| {
-            std.debug.print("\t{s}\n", .{token.lexeme});
-        }
+        const tokensPrinted = try lexer.printTokens();
+        std.debug.print("{s}", .{tokensPrinted});
     }
 
     if (options.@"halt-lexer") {

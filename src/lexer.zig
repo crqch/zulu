@@ -50,6 +50,23 @@ pub const TokenType = enum {
     EOF,
 };
 
+pub fn printTokens(self: *Lexer) LexerError![]const u8 {
+    var buffer = std.ArrayList(u8).initCapacity(self.allocator, 0) catch return LexerError.OUT_OF_MEMORY;
+
+    for (self.tokens.items) |token| {
+        switch (token.type) {
+            .IDENT, .NUMBER, .STRING => {
+                buffer.print(self.allocator, "{s} ( {s} )\n", .{ @tagName(token.type), token.lexeme }) catch return LexerError.OUT_OF_MEMORY;
+            },
+            else => {
+                buffer.print(self.allocator, "{s}\n", .{@tagName(token.type)}) catch return LexerError.OUT_OF_MEMORY;
+            },
+        }
+    }
+
+    return buffer.items;
+}
+
 const Location = struct { line: usize, column: usize };
 
 pub const Token = struct { type: TokenType, lexeme: []const u8, location: Location };
