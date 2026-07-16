@@ -160,7 +160,7 @@ fn lambdaNud(self: *Parser) ParserError!*Expression {
 }
 
 fn expect(self: *Parser, tokenType: TokenType) ParserError!void {
-    if (self.tokens[self.current].type != tokenType) return ParserError.UNEXPECTED_TOKEN;
+    if (self.current >= self.tokens.len or self.tokens[self.current].type != tokenType) return ParserError.UNEXPECTED_TOKEN;
     self.current += 1;
 }
 
@@ -238,7 +238,7 @@ fn binOpLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*Expression
 }
 
 fn matchToken(self: *Parser, tokenType: TokenType) bool {
-    if (self.current == self.tokens.len) return false;
+    if (self.current >= self.tokens.len) return false;
     if (self.tokens[self.current].type == tokenType) {
         self.current += 1;
         return true;
@@ -264,10 +264,14 @@ fn previousToken(self: *Parser) Token {
 }
 
 fn slide(self: *Parser, tokenType: TokenType) ParserError!void {
-    while (!self.matchToken(tokenType)) {
+    while (self.current < self.tokens.len) {
+        if (self.tokens[self.current].type == tokenType) {
+            self.current += 1;
+            return;
+        }
         self.current += 1;
     }
-    if (self.previousToken().type != tokenType) return ParserError.UNEXPECTED_TOKEN;
+    return ParserError.UNEXPECTED_TOKEN;
 }
 
 fn stringOfLexeme(self: *Parser, lexeme: []const u8) ParserError![]u8 {
