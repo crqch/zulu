@@ -171,9 +171,12 @@ pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Optio
             error.NOT_A_BINARY_OPERATION => {
                 std.debug.print("Invalid binary operation at line {}, column {}.\n", .{ token.location.line, token.location.column });
             },
-            else => {
-                std.debug.print("Unexpected parsing error: {s}\n", .{@errorName(err)});
+            error.OUT_OF_MEMORY => {
+                std.debug.print("Out of memory.\n", .{});
             },
+            // else => {
+            //     std.debug.print("Unexpected parsing error: {s}\n", .{@errorName(err)});
+            // },
         }
         printSourceHighlight(source, token.location.line, token.location.column, token.lexeme.len);
         return err;

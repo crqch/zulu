@@ -18,7 +18,8 @@ pub const ParserError = error{
     UNKNOWN_ESCAPE_CHARACTER,
     EXPECTED_BOP,
     NOT_A_BINARY_OPERATION,
-} || std.mem.Allocator.Error;
+    OUT_OF_MEMORY,
+};
 
 pub const Parser = struct {
     allocator: std.mem.Allocator,
@@ -70,7 +71,7 @@ pub const Parser = struct {
     }
 
     fn freshExpression(self: *Parser) ParserError!*Expression {
-        return try self.allocator.create(Expression);
+        return self.allocator.create(Expression) catch return ParserError.OUT_OF_MEMORY;
     }
 
     fn slide(self: *Parser, tokenType: TokenType) bool {
@@ -257,10 +258,10 @@ pub const Parser = struct {
 
     fn lambda(self: *Parser) ParserError!*Expression {
         if (self.matchToken(.LBRA)) {
-            var idents = try std.ArrayList([]const u8).initCapacity(self.allocator, 0);
+            var idents = std.ArrayList([]const u8).initCapacity(self.allocator, 0) catch return ParserError.OUT_OF_MEMORY;
 
             while (self.matchToken(.IDENT)) {
-                try idents.append(self.allocator, self.previousToken().lexeme);
+                idents.append(self.allocator, self.previousToken().lexeme) catch return ParserError.OUT_OF_MEMORY;
             }
 
             if (!self.matchToken(.SEMICOLON)) return error.LAMBDA_UNRESOLVED;
@@ -294,7 +295,7 @@ pub const Parser = struct {
             if (self.matchToken(.NUMBER)) {
                 const num = self.previousToken();
                 expr.* = Expression{
-                    .Number = try std.fmt.allocPrint(self.allocator, "-{s}", .{num.lexeme}),
+                    .Number = std.fmt.allocPrint(self.allocator, "-{s}", .{num.lexeme}) catch return ParserError.OUT_OF_MEMORY,
                 };
             } else {
                 return error.EXPECTED_EXPRESSION;
@@ -334,7 +335,7 @@ pub const Parser = struct {
     }
 
     fn stringOfLexeme(self: *Parser, lexeme: []const u8) ParserError![]u8 {
-        var string = try std.ArrayList(u8).initCapacity(self.allocator, 0);
+        var string = std.ArrayList(u8).initCapacity(self.allocator, 0) catch return ParserError.OUT_OF_MEMORY;
         var escape = false;
 
         for (lexeme[1 .. lexeme.len - 1]) |c| {
@@ -349,13 +350,13 @@ pub const Parser = struct {
                     else => return error.UNKNOWN_ESCAPE_CHARACTER,
                 }
                 escape = false;
-                try string.append(self.allocator, char);
+                string.append(self.allocator, char) catch return ParserError.OUT_OF_MEMORY;
             } else {
                 if (c == '\\') {
                     escape = true;
                     continue;
                 }
-                try string.append(self.allocator, c);
+                string.append(self.allocator, c) catch return ParserError.OUT_OF_MEMORY;
             }
         }
 
