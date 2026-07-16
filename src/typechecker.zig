@@ -227,6 +227,32 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
             freshType.* = .Boolean;
             return freshType;
         },
+        .UnaryMinus => |unaryMinus| {
+            const tp = try self._inferType(unaryMinus, environment);
+
+            const intType = try self.makeFreshTypeSpecific(.Int);
+            const floatType = try self.makeFreshTypeSpecific(.Float);
+
+            self.unifyTypes(tp, intType) catch {
+                self.unifyTypes(tp, floatType) catch {
+                    self.errorContext = .{
+                        .UNEXPECTED_TYPE = .{
+                            .expectedType = self.allocator.dupe(*Type, &[_]*Type{
+                                intType,
+                                floatType,
+                            }) catch {
+                                return TypeError.OUT_OF_MEMORY;
+                            },
+                            .foundType = tp,
+                            .context = expression,
+                        },
+                    };
+                    return TypeError.UNEXPECTED_TYPE;
+                };
+            };
+
+            return tp;
+        },
         .Variable => |v| {
             const tp = environment.get(v);
 

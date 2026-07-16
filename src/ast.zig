@@ -27,6 +27,7 @@ pub const Expression = union(enum) {
         right: *Expression,
     },
     Not: *Expression,
+    UnaryMinus: *Expression,
     Variable: []const u8,
     Number: []const u8,
     Boolean: bool,
@@ -125,6 +126,11 @@ pub const AstPrinter = struct {
                 try self.buffer.print(self.allocator, "Not\n", .{});
 
                 try self.printNode(not.*, level + 1);
+            },
+            .UnaryMinus => |opposite| {
+                try self.buffer.print(self.allocator, "UnaryMinus\n", .{});
+
+                try self.printNode(opposite.*, level + 1);
             },
         }
     }

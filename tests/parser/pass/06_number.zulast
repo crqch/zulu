@@ -1,3 +1,5 @@
 -1
 ---
-Number( -1 )
+BinaryOperation( MULTIPLY )
+ Number( -1 )
+ Number( 1 )
