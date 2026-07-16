@@ -1,5 +1,4 @@
 -1
 ---
-BinaryOperation( MULTIPLY )
- Number( -1 )
+UnaryMinus
  Number( 1 )
