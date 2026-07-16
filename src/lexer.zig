@@ -1,6 +1,16 @@
 const std = @import("std");
 const testing = std.testing;
 
+const Lexer = @This();
+
+allocator: std.mem.Allocator,
+tokens: std.ArrayList(Token),
+source: []const u8,
+start: usize = 0,
+current: usize = 0,
+line: usize = 1,
+column: usize = 1,
+
 pub const TokenType = enum {
     PLUS,
     MINUS,
@@ -58,154 +68,144 @@ pub const LexerError = error{
     UNTERMINATED_STRING_LITERAL,
 } || std.mem.Allocator.Error;
 
-pub const Lexer = struct {
-    allocator: std.mem.Allocator,
-    tokens: std.ArrayList(Token),
-    source: []const u8,
-    start: usize = 0,
-    current: usize = 0,
-    line: usize = 1,
-    column: usize = 1,
+pub fn init(allocator: std.mem.Allocator, source: []const u8) !Lexer {
+    return Lexer{ .allocator = allocator, .tokens = try std.ArrayList(Token).initCapacity(allocator, 0), .source = source };
+}
 
-    pub fn init(allocator: std.mem.Allocator, source: []const u8) !Lexer {
-        return Lexer{ .allocator = allocator, .tokens = try std.ArrayList(Token).initCapacity(allocator, 0), .source = source };
-    }
+pub fn deinit(self: *Lexer) void {
+    self.tokens.deinit(self.allocator);
+}
 
-    pub fn deinit(self: *Lexer) void {
-        self.tokens.deinit(self.allocator);
-    }
-
-    pub fn scanTokens(self: *Lexer) LexerError![]Token {
-        while (!self.isAtEnd()) {
-            self.start = self.current;
-            try self.scanToken();
-        }
-
+pub fn scanTokens(self: *Lexer) LexerError![]Token {
+    while (!self.isAtEnd()) {
         self.start = self.current;
-        try self.addToken(.EOF);
-
-        return self.tokens.items;
+        try self.scanToken();
     }
 
-    fn scanToken(self: *Lexer) LexerError!void {
-        const char = self.advance();
-        switch (char) {
-            '+', '-', '/', '*', '=', '!', '(', ')', '[', ']', ';', '>', '<' => {
-                return try self.addToken(switch (char) {
-                    '+' => .PLUS,
-                    '-' => .MINUS,
-                    '*' => .ASTERISK,
-                    '/' => if (self.match('/')) .SLASHSLASH else .SLASH,
-                    '>' => if (self.match('=')) .GTEQ else .GT,
-                    '<' => if (self.match('=')) .LTEQ else .LT,
-                    '=' => if (self.match('=')) .EQEQ else .EQ,
-                    '!' => if (self.match('='))
-                        (if (self.match('=')) .NOTEQEQ else .NOTEQ)
-                    else
-                        .BANG,
-                    '(' => .LPAR,
-                    ')' => .RPAR,
-                    '[' => .LBRA,
-                    ']' => .RBRA,
-                    ';' => .SEMICOLON,
-                    else => unreachable,
-                });
-            },
-            else => {
-                if (std.ascii.isDigit(char) or char == '.') {
-                    try self.number(char);
-                } else if (isValidIdentChar(char)) {
-                    try self.identifier();
-                } else if (char == '"') {
-                    try self.string();
-                } else if (std.ascii.isWhitespace(char)) {
-                    if (char == '\n') {
-                        self.line += 1;
-                        self.column = 1;
-                    } else {
-                        self.column += 1;
-                    }
-                } else return error.UNMATCHED_TOKEN;
-            },
-        }
+    self.start = self.current;
+    try self.addToken(.EOF);
+
+    return self.tokens.items;
+}
+
+fn scanToken(self: *Lexer) LexerError!void {
+    const char = self.advance();
+    switch (char) {
+        '+', '-', '/', '*', '=', '!', '(', ')', '[', ']', ';', '>', '<' => {
+            return try self.addToken(switch (char) {
+                '+' => .PLUS,
+                '-' => .MINUS,
+                '*' => .ASTERISK,
+                '/' => if (self.match('/')) .SLASHSLASH else .SLASH,
+                '>' => if (self.match('=')) .GTEQ else .GT,
+                '<' => if (self.match('=')) .LTEQ else .LT,
+                '=' => if (self.match('=')) .EQEQ else .EQ,
+                '!' => if (self.match('='))
+                    (if (self.match('=')) .NOTEQEQ else .NOTEQ)
+                else
+                    .BANG,
+                '(' => .LPAR,
+                ')' => .RPAR,
+                '[' => .LBRA,
+                ']' => .RBRA,
+                ';' => .SEMICOLON,
+                else => unreachable,
+            });
+        },
+        else => {
+            if (std.ascii.isDigit(char) or char == '.') {
+                try self.number(char);
+            } else if (isValidIdentChar(char)) {
+                try self.identifier();
+            } else if (char == '"') {
+                try self.string();
+            } else if (std.ascii.isWhitespace(char)) {
+                if (char == '\n') {
+                    self.line += 1;
+                    self.column = 1;
+                } else {
+                    self.column += 1;
+                }
+            } else return error.UNMATCHED_TOKEN;
+        },
     }
+}
 
-    fn number(self: *Lexer, char: u8) LexerError!void {
-        var point = char == '.';
-        while (!self.isAtEnd() and std.ascii.isDigit(self.peek())) self.skip();
+fn number(self: *Lexer, char: u8) LexerError!void {
+    var point = char == '.';
+    while (!self.isAtEnd() and std.ascii.isDigit(self.peek())) self.skip();
 
-        if (!self.isAtEnd() and self.peek() == '.') {
-            if (point) return error.UNMATCHED_TOKEN;
-            point = true;
-            self.skip();
-            while (!self.isAtEnd() and std.ascii.isDigit(self.peek())) self.skip();
-        }
-
-        if (!self.isAtEnd() and self.peek() == '.') return error.UNMATCHED_TOKEN;
-
-        try self.addToken(.NUMBER);
-    }
-
-    fn identifier(self: *Lexer) LexerError!void {
-        while (!self.isAtEnd() and (isValidIdentChar(self.peek()) or std.ascii.isDigit(self.peek()))) self.skip();
-        const lower = try lowerOfString(self.allocator, self.source[self.start..self.current]);
-        defer self.allocator.free(lower);
-
-        const tokenType = keywords.get(lower) orelse .IDENT;
-        try self.addToken(tokenType);
-    }
-
-    fn string(self: *Lexer) LexerError!void {
-        var height: usize = 0;
-        while (!self.isAtEnd() and (self.peek() != '"' or self.escapeCharacter())) {
-            if (self.peek() == '\n') height += 1;
-            self.skip();
-        }
-
-        if (self.isAtEnd() and self.source[self.current - 1] != '"') return error.UNTERMINATED_STRING_LITERAL;
-
+    if (!self.isAtEnd() and self.peek() == '.') {
+        if (point) return error.UNMATCHED_TOKEN;
+        point = true;
         self.skip();
-
-        try self.addToken(.STRING);
-
-        self.line += height;
+        while (!self.isAtEnd() and std.ascii.isDigit(self.peek())) self.skip();
     }
 
-    fn escapeCharacter(self: *Lexer) bool {
-        if (self.current < 1) return false;
-        return self.source[self.current - 1] == '\\';
+    if (!self.isAtEnd() and self.peek() == '.') return error.UNMATCHED_TOKEN;
+
+    try self.addToken(.NUMBER);
+}
+
+fn identifier(self: *Lexer) LexerError!void {
+    while (!self.isAtEnd() and (isValidIdentChar(self.peek()) or std.ascii.isDigit(self.peek()))) self.skip();
+    const lower = try lowerOfString(self.allocator, self.source[self.start..self.current]);
+    defer self.allocator.free(lower);
+
+    const tokenType = keywords.get(lower) orelse .IDENT;
+    try self.addToken(tokenType);
+}
+
+fn string(self: *Lexer) LexerError!void {
+    var height: usize = 0;
+    while (!self.isAtEnd() and (self.peek() != '"' or self.escapeCharacter())) {
+        if (self.peek() == '\n') height += 1;
+        self.skip();
     }
 
-    fn peek(self: *Lexer) u8 {
-        return self.source[self.current];
-    }
+    if (self.isAtEnd() and self.source[self.current - 1] != '"') return error.UNTERMINATED_STRING_LITERAL;
 
-    fn match(self: *Lexer, char: u8) bool {
-        if (self.peek() == char) {
-            self.current += 1;
-            return true;
-        }
-        return false;
-    }
+    self.skip();
 
-    fn advance(self: *Lexer) u8 {
+    try self.addToken(.STRING);
+
+    self.line += height;
+}
+
+fn escapeCharacter(self: *Lexer) bool {
+    if (self.current < 1) return false;
+    return self.source[self.current - 1] == '\\';
+}
+
+fn peek(self: *Lexer) u8 {
+    return self.source[self.current];
+}
+
+fn match(self: *Lexer, char: u8) bool {
+    if (self.peek() == char) {
         self.current += 1;
-        return self.source[self.current - 1];
+        return true;
     }
+    return false;
+}
 
-    fn skip(self: *Lexer) void {
-        self.current += 1;
-    }
+fn advance(self: *Lexer) u8 {
+    self.current += 1;
+    return self.source[self.current - 1];
+}
 
-    fn addToken(self: *Lexer, tp: TokenType) LexerError!void {
-        try self.tokens.append(self.allocator, Token{ .type = tp, .lexeme = self.source[self.start..self.current], .location = Location{ .column = self.column, .line = self.line } });
-        self.column += self.current - self.start;
-    }
+fn skip(self: *Lexer) void {
+    self.current += 1;
+}
 
-    fn isAtEnd(self: *Lexer) bool {
-        return self.current == self.source.len;
-    }
-};
+fn addToken(self: *Lexer, tp: TokenType) LexerError!void {
+    try self.tokens.append(self.allocator, Token{ .type = tp, .lexeme = self.source[self.start..self.current], .location = Location{ .column = self.column, .line = self.line } });
+    self.column += self.current - self.start;
+}
+
+fn isAtEnd(self: *Lexer) bool {
+    return self.current == self.source.len;
+}
 
 fn isValidIdentChar(char: u8) bool {
     return (std.ascii.isAlphabetic(char) or char == '@' or char == '#' or char == '_');
