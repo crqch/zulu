@@ -1,10 +1,30 @@
 const std = @import("std");
+
 const ast = @import("ast.zig");
 const Expression = ast.Expression;
 const Bop = ast.Bop;
 const lexer = @import("lexer.zig");
 const Token = lexer.Token;
 const TokenType = lexer.TokenType;
+
+const Parser = @This();
+
+allocator: std.mem.Allocator,
+current: usize = 0,
+tokens: []Token,
+
+const Precedence = struct {
+    pub const none: u8 = 0;
+    pub const assignment: u8 = 10; // =
+    pub const logic_or: u8 = 20; //   or
+    pub const logic_and: u8 = 30; //  and
+    pub const equality: u8 = 40; //   ==, !=
+    pub const comparison: u8 = 50; // <, >, <=, >=
+    pub const term: u8 = 60; //       +, -
+    pub const factor: u8 = 70; //     *, /
+    pub const unary: u8 = 80; //      !, -
+    pub const call: u8 = 90; //       (), application
+};
 
 pub const ParserError = error{
     EOF_NOT_REACHED,
@@ -19,358 +39,268 @@ pub const ParserError = error{
     EXPECTED_BOP,
     NOT_A_BINARY_OPERATION,
     OUT_OF_MEMORY,
+    UNEXPECTED_TOKEN,
 };
 
-pub const Parser = struct {
-    allocator: std.mem.Allocator,
-    tokens: []Token,
-    current: usize = 0,
-
-    pub fn init(allocator: std.mem.Allocator, tokens: []Token) Parser {
-        return Parser{ .allocator = allocator, .tokens = tokens };
-    }
-
-    pub fn parse(self: *Parser) ParserError!*Expression {
-        const expr = try self.declaration();
-        if (!self.matchToken(.EOF)) return error.EOF_NOT_REACHED;
-        return expr;
-    }
-
-    fn matchToken(self: *Parser, tokenType: TokenType) bool {
-        if (self.current == self.tokens.len) return false;
-        if (self.tokens[self.current].type == tokenType) {
-            self.current += 1;
-            return true;
-        }
-        return false;
-    }
-
-    fn backMatchToken(self: *Parser, tokenType: TokenType) bool {
-        if (self.current == 0) return false;
-        if (self.tokens[self.current].type == tokenType) {
-            self.current -= 1;
-            return true;
-        }
-        return false;
-    }
-
-    fn isAtPrimaryStart(self: *Parser) bool {
-        const token = self.tokens[self.current];
-        const tokenType = token.type;
-        return tokenType == .NUMBER or
-            tokenType == .STRING or
-            tokenType == .KW_TRUE or
-            tokenType == .KW_FALSE or
-            tokenType == .LPAR or
-            tokenType == .LBRA or
-            tokenType == .IDENT;
-    }
-
-    fn previousToken(self: *Parser) Token {
-        return self.tokens[self.current - 1];
-    }
-
-    fn freshExpression(self: *Parser) ParserError!*Expression {
-        return self.allocator.create(Expression) catch return ParserError.OUT_OF_MEMORY;
-    }
-
-    fn slide(self: *Parser, tokenType: TokenType) bool {
-        while (!self.matchToken(tokenType)) {
-            self.current += 1;
-        }
-        return self.previousToken().type == tokenType;
-    }
-
-    fn declaration(self: *Parser) ParserError!*Expression {
-        const expr = try self.ifElse();
-
-        if (self.matchToken(.SEMICOLON)) {
-            if (isEquality(expr)) {
-                const leftNode = try getBopLeftNode(expr);
-                if (leftNode.* != Expression.Variable) return error.EXPECTED_VARIABLE_AT_DECLARATION;
-                const ident = expr.BinaryOperation.left.Variable;
-                const expression = expr.BinaryOperation.right;
-                const block = try self.declaration();
-
-                expr.* = Expression{
-                    .Declaration = .{
-                        .identifier = ident,
-                        .block = block,
-                        .expression = expression,
-                    },
-                };
-            }
-        }
-
-        return expr;
-    }
-
-    fn ifElse(self: *Parser) ParserError!*Expression {
-        if (self.matchToken(.KW_IF)) {
-            if (!self.matchToken(.LPAR)) return error.EXPECTED_LEFT_PARENTHESES;
-            const expression = try self.logical();
-            if (!self.matchToken(.RPAR)) return error.EXPECTED_RIGHT_PARENTHESES;
-            const satisfyBlock = try self.logical();
-            if (!self.matchToken(.KW_ELSE)) return error.EXPECTED_ELSE_KEYWORD;
-            const elseBlock = try self.ifElse();
-
-            const fresh = try self.freshExpression();
-
-            fresh.* = Expression{
-                .Condition = .{
-                    .expression = expression,
-                    .satisfyBlock = satisfyBlock,
-                    .elseBlock = elseBlock,
-                },
-            };
-
-            return fresh;
-        }
-
-        return try self.logical();
-    }
-
-    fn logical(self: *Parser) ParserError!*Expression {
-        var left = try self.equality();
-
-        while (self.matchToken(.KW_AND) or self.matchToken(.KW_OR)) {
-            const previous = self.previousToken().type;
-            const bop = try bopOfToken(previous);
-
-            const right = try self.equality();
-            const fresh = try self.freshExpression();
-            fresh.* = Expression{ .BinaryOperation = .{
-                .left = left,
-                .operation = bop,
-                .right = right,
-            } };
-
-            left = fresh;
-        }
-        return left;
-    }
-
-    fn equality(self: *Parser) ParserError!*Expression {
-        var left = try self.comparison();
-
-        while (self.matchToken(.EQEQ) or self.matchToken(.EQ) or self.matchToken(.NOTEQ) or self.matchToken(.NOTEQEQ)) {
-            const previous = self.previousToken().type;
-
-            const right = try self.comparison();
-            const bop = try bopOfToken(previous);
-
-            const fresh = try self.freshExpression();
-
-            fresh.* = Expression{ .BinaryOperation = .{
-                .left = left,
-                .operation = bop,
-                .right = right,
-            } };
-
-            left = fresh;
-        }
-
-        return left;
-    }
-
-    fn comparison(self: *Parser) ParserError!*Expression {
-        var left = try self.term();
-
-        while (self.matchToken(.GT) or self.matchToken(.GTEQ) or self.matchToken(.LT) or self.matchToken(.LTEQ)) {
-            const previous = self.previousToken().type;
-            const bop = try bopOfToken(previous);
-
-            const right = try self.term();
-            const fresh = try self.freshExpression();
-            fresh.* = Expression{ .BinaryOperation = .{
-                .left = left,
-                .operation = bop,
-                .right = right,
-            } };
-
-            left = fresh;
-        }
-        return left;
-    }
-
-    fn term(self: *Parser) ParserError!*Expression {
-        var left = try self.factor();
-
-        while (self.matchToken(.PLUS) or self.matchToken(.MINUS)) {
-            const previous = self.previousToken().type;
-            const bop = try bopOfToken(previous);
-
-            const right = try self.factor();
-
-            const fresh = try self.freshExpression();
-
-            fresh.* = Expression{ .BinaryOperation = .{
-                .left = left,
-                .operation = bop,
-                .right = right,
-            } };
-
-            left = fresh;
-        }
-
-        return left;
-    }
-
-    fn factor(self: *Parser) ParserError!*Expression {
-        var left = try self.application();
-
-        while (self.matchToken(.ASTERISK) or self.matchToken(.SLASH)) {
-            const previous = self.previousToken().type;
-            const bop = try bopOfToken(previous);
-
-            const right = try self.application();
-
-            const fresh = try self.freshExpression();
-
-            fresh.* = Expression{ .BinaryOperation = .{
-                .left = left,
-                .operation = bop,
-                .right = right,
-            } };
-
-            left = fresh;
-        }
-        return left;
-    }
-
-    fn application(self: *Parser) ParserError!*Expression {
-        var left = try self.lambda();
-
-        while (self.isAtPrimaryStart()) {
-            const right = try self.lambda();
-
-            const fresh = try self.freshExpression();
-            fresh.* = Expression{ .Application = .{
-                .callee = left,
-                .value = right,
-            } };
-
-            left = fresh;
-        }
-
-        return left;
-    }
-
-    fn lambda(self: *Parser) ParserError!*Expression {
-        if (self.matchToken(.LBRA)) {
-            var idents = std.ArrayList([]const u8).initCapacity(self.allocator, 0) catch return ParserError.OUT_OF_MEMORY;
-
-            while (self.matchToken(.IDENT)) {
-                idents.append(self.allocator, self.previousToken().lexeme) catch return ParserError.OUT_OF_MEMORY;
-            }
-
-            if (!self.matchToken(.SEMICOLON)) return error.LAMBDA_UNRESOLVED;
-
-            var block = try self.declaration();
-            if (!self.matchToken(.RBRA)) return error.LAMBDA_UNRESOLVED;
-
-            const items = idents.items;
-            var i = items.len;
-            while (i > 0) : (i -= 1) {
-                const ident = items[i - 1];
-                const fresh = try self.freshExpression();
-                fresh.* = Expression{ .Lambda = .{
-                    .identifier = ident,
-                    .block = block,
-                    .type = null,
-                } };
-                block = fresh;
-            }
-
-            return block;
-        }
-
-        return self.primary();
-    }
-
-    fn primary(self: *Parser) ParserError!*Expression {
-        var expr = try self.freshExpression();
-        const token = self.tokens[self.current];
-        if (self.matchToken(.MINUS)) {
-            if (self.matchToken(.NUMBER)) {
-                const num = self.previousToken();
-                expr.* = Expression{
-                    .Number = std.fmt.allocPrint(self.allocator, "-{s}", .{num.lexeme}) catch return ParserError.OUT_OF_MEMORY,
-                };
-            } else {
-                return error.EXPECTED_EXPRESSION;
-            }
-        } else if (self.matchToken(.BANG)) {
-            const rest = try self.primary();
-
-            expr.* = Expression{
-                .Not = rest,
-            };
-        } else if (self.matchToken(.NUMBER)) {
-            expr.* = Expression{
-                .Number = token.lexeme,
-            };
-        } else if (self.matchToken(.STRING)) {
-            const value = try self.stringOfLexeme(token.lexeme);
-
-            expr.* = Expression{
-                .String = value,
-            };
-        } else if (self.matchToken(.IDENT)) {
-            expr.* = Expression{
-                .Variable = token.lexeme,
-            };
-        } else if (self.matchToken(.KW_TRUE) or self.matchToken(.KW_FALSE)) {
-            expr.* = Expression{
-                .Boolean = token.type == .KW_TRUE,
-            };
-        } else if (self.matchToken(.LPAR)) {
-            expr = try self.declaration();
-            if (!self.matchToken(.RPAR)) return error.PARENTHESES_UNMATCHED;
-        } else {
-            return error.EXPECTED_EXPRESSION;
-        }
-
-        return expr;
-    }
-
-    fn stringOfLexeme(self: *Parser, lexeme: []const u8) ParserError![]u8 {
-        var string = std.ArrayList(u8).initCapacity(self.allocator, 0) catch return ParserError.OUT_OF_MEMORY;
-        var escape = false;
-
-        for (lexeme[1 .. lexeme.len - 1]) |c| {
-            if (escape) {
-                var char: u8 = c;
-                switch (c) {
-                    'n' => char = '\n',
-                    'r' => char = '\r',
-                    't' => char = '\t',
-                    '"' => char = '"',
-                    '\\' => char = '\\',
-                    else => return error.UNKNOWN_ESCAPE_CHARACTER,
-                }
-                escape = false;
-                string.append(self.allocator, char) catch return ParserError.OUT_OF_MEMORY;
-            } else {
-                if (c == '\\') {
-                    escape = true;
-                    continue;
-                }
-                string.append(self.allocator, c) catch return ParserError.OUT_OF_MEMORY;
-            }
-        }
-
-        return string.items;
-    }
+const PrefixParselet = *const fn (self: *Parser) ParserError!*Expression;
+
+const InfixParselet = struct {
+    precedence: u8,
+    led: *const fn (self: *Parser, left: *Expression, precedence: u8) ParserError!*Expression,
 };
 
-fn isEquality(expression: *Expression) bool {
-    return expression.* == .BinaryOperation and expression.BinaryOperation.operation == Bop.EQ;
+pub fn init(allocator: std.mem.Allocator, tokens: []Token) Parser {
+    return Parser{ .allocator = allocator, .tokens = tokens };
 }
 
-fn getBopLeftNode(expression: *Expression) ParserError!*Expression {
-    if (expression.* != .BinaryOperation) return error.EXPECTED_BOP;
-    return expression.BinaryOperation.left;
+pub fn parse(self: *Parser) ParserError!*Expression {
+    const expr = try self.parseExpression(Precedence.none);
+    if (!self.matchToken(.EOF)) return error.EOF_NOT_REACHED;
+    return expr;
+}
+
+fn parseExpression(self: *Parser, minBp: u8) ParserError!*Expression {
+    var left = try self.nud();
+
+    while (true) {
+        if (self.isAtPrimaryStart() and Precedence.call > minBp) {
+            left = try self.applicationLed(left);
+            continue;
+        }
+        const entry = led(self.tokens[self.current].type) orelse break;
+        if (entry.precedence <= minBp) break;
+        self.current += 1;
+        left = try entry.led(self, left, entry.precedence);
+    }
+    return left;
+}
+
+fn nud(self: *Parser) ParserError!*Expression {
+    const token = self.tokens[self.current];
+    self.current += 1;
+    return switch (token.type) {
+        .NUMBER => self.numberNud(),
+        .STRING => self.stringNud(),
+        .IDENT => self.identNud(),
+        .KW_TRUE, .KW_FALSE => self.boolNud(),
+        .MINUS => self.unaryMinusNud(),
+        .BANG => self.notNud(),
+        .LPAR => self.groupNud(),
+        .LBRA => self.lambdaNud(),
+        .KW_IF => self.ifNud(),
+        else => error.EXPECTED_EXPRESSION,
+    };
+}
+
+fn numberNud(self: *Parser) ParserError!*Expression {
+    return try self.newExpression(Expression{
+        .Number = self.previousToken().lexeme,
+    });
+}
+
+fn stringNud(self: *Parser) ParserError!*Expression {
+    return try self.newExpression(Expression{
+        .String = try self.stringOfLexeme(self.previousToken().lexeme),
+    });
+}
+
+fn identNud(self: *Parser) ParserError!*Expression {
+    return try self.newExpression(Expression{
+        .Variable = self.previousToken().lexeme,
+    });
+}
+
+fn boolNud(self: *Parser) ParserError!*Expression {
+    return try self.newExpression(Expression{
+        .Boolean = self.previousToken().type == .KW_TRUE,
+    });
+}
+
+fn unaryMinusNud(self: *Parser) ParserError!*Expression {
+    return try self.newExpression(Expression{ .BinaryOperation = .{
+        .left = try self.newExpression(Expression{
+            .Number = "-1",
+        }),
+        .operation = Bop.MULTIPLY,
+        .right = try self.parseExpression(Precedence.unary),
+    } });
+}
+
+fn notNud(self: *Parser) ParserError!*Expression {
+    return try self.newExpression(Expression{
+        .Not = try self.parseExpression(Precedence.unary),
+    });
+}
+
+fn groupNud(self: *Parser) ParserError!*Expression {
+    const innerExpression = try self.parseExpression(Precedence.none);
+
+    self.expect(.RPAR) catch return ParserError.PARENTHESES_UNMATCHED;
+    return innerExpression;
+}
+
+fn lambdaNud(self: *Parser) ParserError!*Expression {
+    self.slide(.SEMICOLON) catch return ParserError.LAMBDA_UNRESOLVED;
+    const semicolonIndex = self.current - 1;
+    var lambda = try self.parseExpression(Precedence.none);
+
+    self.expect(.RBRA) catch return ParserError.LAMBDA_UNRESOLVED;
+    const endIndex = self.current;
+
+    self.current = semicolonIndex - 1;
+
+    while (self.tokens[self.current].type != .LBRA) : (self.current -= 1) {
+        self.expect(.IDENT) catch return ParserError.LAMBDA_UNRESOLVED;
+        self.current -= 1;
+        lambda = try self.newExpression(Expression{ .Lambda = .{
+            .block = lambda,
+            .identifier = self.tokens[self.current].lexeme,
+            .type = null,
+        } });
+    }
+
+    self.current = endIndex;
+    return lambda;
+}
+
+fn expect(self: *Parser, tokenType: TokenType) ParserError!void {
+    if (self.tokens[self.current].type != tokenType) return ParserError.UNEXPECTED_TOKEN;
+    self.current += 1;
+}
+
+fn ifNud(self: *Parser) ParserError!*Expression {
+    try self.expect(.LPAR);
+    const condition = try self.parseExpression(Precedence.none);
+    try self.expect(.RPAR);
+    const satisfyBlock = try self.parseExpression(Precedence.none);
+    try self.expect(.KW_ELSE);
+    const elseBlock = try self.parseExpression(Precedence.none);
+
+    return try self.newExpression(.{
+        .Condition = .{
+            .expression = condition,
+            .satisfyBlock = satisfyBlock,
+            .elseBlock = elseBlock,
+        },
+    });
+}
+
+fn newExpression(self: *Parser, expr: Expression) ParserError!*Expression {
+    const freshExpr = self.allocator.create(Expression) catch return ParserError.OUT_OF_MEMORY;
+    freshExpr.* = expr;
+
+    return freshExpr;
+}
+
+fn led(tokenType: TokenType) ?InfixParselet {
+    return switch (tokenType) {
+        .ASTERISK, .SLASH => .{ .precedence = Precedence.factor, .led = binOpLed },
+        .PLUS, .MINUS => .{ .precedence = Precedence.term, .led = binOpLed },
+        .GT, .GTEQ, .LT, .LTEQ => .{ .precedence = Precedence.comparison, .led = binOpLed },
+        .EQEQ, .NOTEQ, .NOTEQEQ => .{ .precedence = Precedence.equality, .led = binOpLed },
+        .EQ => .{ .precedence = Precedence.assignment, .led = binOpLed },
+        .KW_AND => .{ .precedence = Precedence.logic_and, .led = binOpLed },
+        .KW_OR => .{ .precedence = Precedence.logic_or, .led = binOpLed },
+        else => null,
+    };
+}
+
+fn applicationLed(self: *Parser, left: *Expression) ParserError!*Expression {
+    const right = try self.parseExpression(Precedence.call + 1);
+
+    return try self.newExpression(Expression{ .Application = .{
+        .callee = left,
+        .value = right,
+    } });
+}
+
+fn binOpLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*Expression {
+    const bop = try bopOfToken(self.previousToken().type);
+    const right = try self.parseExpression(minBp + 1);
+
+    if (bop == .EQ and self.matchToken(.SEMICOLON)) {
+        if (left.* != .Variable) return ParserError.EXPECTED_VARIABLE_AT_DECLARATION;
+
+        const block = try self.parseExpression(Precedence.none);
+
+        return try self.newExpression(.{
+            .Declaration = .{
+                .identifier = left.Variable,
+                .expression = right,
+                .block = block,
+            },
+        });
+    }
+
+    return try self.newExpression(.{
+        .BinaryOperation = .{
+            .operation = bop,
+            .left = left,
+            .right = right,
+        },
+    });
+}
+
+fn matchToken(self: *Parser, tokenType: TokenType) bool {
+    if (self.current == self.tokens.len) return false;
+    if (self.tokens[self.current].type == tokenType) {
+        self.current += 1;
+        return true;
+    }
+    return false;
+}
+
+fn isAtPrimaryStart(self: *Parser) bool {
+    const token = self.tokens[self.current];
+    const tokenType = token.type;
+    return tokenType == .NUMBER or
+        tokenType == .STRING or
+        tokenType == .KW_TRUE or
+        tokenType == .KW_FALSE or
+        tokenType == .LPAR or
+        tokenType == .LBRA or
+        tokenType == .BANG or
+        tokenType == .IDENT;
+}
+
+fn previousToken(self: *Parser) Token {
+    return self.tokens[self.current - 1];
+}
+
+fn slide(self: *Parser, tokenType: TokenType) ParserError!void {
+    while (!self.matchToken(tokenType)) {
+        self.current += 1;
+    }
+    if (self.previousToken().type != tokenType) return ParserError.UNEXPECTED_TOKEN;
+}
+
+fn stringOfLexeme(self: *Parser, lexeme: []const u8) ParserError![]u8 {
+    var string = std.ArrayList(u8).initCapacity(self.allocator, 0) catch return ParserError.OUT_OF_MEMORY;
+    var escape = false;
+
+    for (lexeme[1 .. lexeme.len - 1]) |c| {
+        if (escape) {
+            var char: u8 = c;
+            switch (c) {
+                'n' => char = '\n',
+                'r' => char = '\r',
+                't' => char = '\t',
+                '"' => char = '"',
+                '\\' => char = '\\',
+                else => return error.UNKNOWN_ESCAPE_CHARACTER,
+            }
+            escape = false;
+            string.append(self.allocator, char) catch return ParserError.OUT_OF_MEMORY;
+        } else {
+            if (c == '\\') {
+                escape = true;
+                continue;
+            }
+            string.append(self.allocator, c) catch return ParserError.OUT_OF_MEMORY;
+        }
+    }
+
+    return string.items;
 }
 
 fn bopOfToken(tp: TokenType) ParserError!Bop {

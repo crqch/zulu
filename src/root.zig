@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Io = std.Io;
 
-pub const Parser = @import("./parser.zig").Parser;
+pub const Parser = @import("./parser.zig");
 pub const Lexer = @import("./lexer.zig");
 pub const Token = @import("./lexer.zig").Token;
 pub const Expression = @import("./ast.zig").Expression;

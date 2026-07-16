@@ -174,6 +174,9 @@ pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Optio
             error.OUT_OF_MEMORY => {
                 std.debug.print("Out of memory.\n", .{});
             },
+            error.UNEXPECTED_TOKEN => {
+                std.debug.print("Unexpected token: {s}\n", .{token.lexeme});
+            },
             // else => {
             //     std.debug.print("Unexpected parsing error: {s}\n", .{@errorName(err)});
             // },
