@@ -1,6 +1,7 @@
 const std = @import("std");
 const Interpreter = @This();
 const Expression = @import("./ast.zig").Expression;
+const MatchPattern = @import("./ast.zig").MatchPattern;
 const Bop = @import("./ast.zig").Bop;
 const TypeChecker = @import("./typechecker.zig");
 
@@ -346,7 +347,56 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 },
             };
         },
+        .Match => |match| {
+            const value = try self._eval(match.scrutinee, environment);
+
+            for (match.cases) |case| {
+                if (try self.matchesPattern(case.pattern.*, value)) {
+                    const freshEnv = try Env.init(self.allocator, environment);
+                    try self.expandEnvByPattern(freshEnv, case.pattern.*, value);
+                    return try self._eval(case.block, freshEnv);
+                }
+            }
+
+            return InterpreterError.MISSING_MATCH_CASE;
+        },
     }
+}
+
+fn expandEnvByPattern(self: *Interpreter, environment: *Env, pattern: MatchPattern, value: Value) InterpreterError!void {
+    return switch (pattern) {
+        .Cons => |cons| {
+            _ = cons;
+            return InterpreterError.UNIMPLEMENTED;
+        },
+        .Tuple => |idents| {
+            if (value != .Tuple or value.Tuple.len != idents.binds.len) return InterpreterError.UNMATCHED_PATTERN;
+            for (idents.binds, value.Tuple) |pat, val| {
+                try self.expandEnvByPattern(environment, pat.*, val);
+            }
+        },
+        .Identifier => |ident| {
+            try environment.add(ident, value);
+        },
+        .Wildcard => {},
+    };
+}
+
+fn matchesPattern(self: *Interpreter, pattern: MatchPattern, value: Value) InterpreterError!bool {
+    return switch (pattern) {
+        .Cons => |cons| {
+            _ = cons;
+            return InterpreterError.UNIMPLEMENTED;
+        },
+        .Tuple => |idents| {
+            if (value != .Tuple or value.Tuple.len != idents.binds.len) return false;
+            for (idents.binds, value.Tuple) |pat, val| {
+                if (!try self.matchesPattern(pat.*, val)) return false;
+            }
+            return true;
+        },
+        .Identifier, .Wildcard => true,
+    };
 }
 
 const InterpreterError = error{
@@ -359,6 +409,8 @@ const InterpreterError = error{
     ENVIRONMENT_MAP_ERROR,
     ENVIRONMENT_INITALIZATION_ERROR,
     TYPE_PROMOTION_NOT_IMPLEMENTED,
+    UNMATCHED_PATTERN,
+    MISSING_MATCH_CASE,
 
     UNIMPLEMENTED,
 };

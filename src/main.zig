@@ -253,6 +253,12 @@ pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Optio
             error.UNIMPLEMENTED => {
                 std.debug.print("Unimplemented feature encountered.\n", .{});
             },
+            error.MISSING_MATCH_CASE => {
+                std.debug.print("Missing match case.\n", .{});
+            },
+            error.UNMATCHED_PATTERN => {
+                std.debug.print("Pattern unmatched in match.\n", .{});
+            },
         }
         if (interpreter.last_expression) |last_expr| {
             if (findExprLocation(tokens, last_expr)) |token| {
