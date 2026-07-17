@@ -54,6 +54,7 @@ const Env = struct {
 };
 
 const ValueType = enum {
+    Unit,
     Integer,
     Float,
     Boolean,
@@ -63,6 +64,7 @@ const ValueType = enum {
 };
 
 pub const Value = union(ValueType) {
+    Unit,
     Integer: i64,
     Float: f64,
     Boolean: bool,
@@ -76,6 +78,7 @@ pub const Value = union(ValueType) {
 
 pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
     return switch (value) {
+        .Unit => "unit",
         .Boolean => if (value.Boolean) "true" else "false",
         .Float => try std.fmt.allocPrint(allocator, "{d}", .{value.Float}),
         .Integer => try std.fmt.allocPrint(allocator, "{d}", .{value.Integer}),
@@ -106,6 +109,9 @@ pub fn eval(self: *Interpreter, expression: *Expression) !Value {
 fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) InterpreterError!Value {
     self.last_expression = expression;
     switch (expression.*) {
+        .Unit => {
+            return Value{ .Unit = {} };
+        },
         .Number => |num| {
             const periodIndex = std.mem.find(u8, num, ".");
 
@@ -362,6 +368,10 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
         },
         .MemberAccess => |memberAccess| {
             _ = memberAccess;
+            return InterpreterError.UNIMPLEMENTED;
+        },
+        .Module => |mod| {
+            _ = mod;
             return InterpreterError.UNIMPLEMENTED;
         },
     }

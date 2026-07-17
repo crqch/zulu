@@ -39,6 +39,8 @@ pub const TokenType = enum {
     RPAR,
     LBRA,
     RBRA,
+    LCUR,
+    RCUR,
 
     IDENT,
     NUMBER,
@@ -52,6 +54,7 @@ pub const TokenType = enum {
     KW_IF,
     KW_ELSE,
     KW_MATCH,
+    KW_MOD,
 
     EOF,
 };
@@ -67,11 +70,12 @@ pub const LexerError = error{
 const keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "true", .KW_TRUE },
     .{ "false", .KW_FALSE },
+    .{ "and", .KW_AND },
+    .{ "or", .KW_OR },
     .{ "if", .KW_IF },
     .{ "else", .KW_ELSE },
     .{ "match", .KW_MATCH },
-    .{ "and", .KW_AND },
-    .{ "or", .KW_OR },
+    .{ "mod", .KW_MOD },
 });
 
 pub fn init(allocator: std.mem.Allocator, source: []const u8) !Lexer {
@@ -114,7 +118,7 @@ pub fn printTokens(self: *Lexer) LexerError![]const u8 {
 fn scanToken(self: *Lexer) LexerError!void {
     const char = self.advance();
     switch (char) {
-        '+', '-', '/', '*', '=', '!', '|', '(', ')', '[', ']', ',', ';', '>', '<', '.' => {
+        '+', '-', '/', '*', '=', '!', '|', '(', ')', '[', ']', '{', '}', ',', ';', '>', '<', '.' => {
             if (char == '.') {
                 if (!self.isAtEnd() and std.ascii.isDigit(self.peek())) {
                     try self.number(char);
@@ -142,6 +146,8 @@ fn scanToken(self: *Lexer) LexerError!void {
                 ')' => .RPAR,
                 '[' => .LBRA,
                 ']' => .RBRA,
+                '{' => .LCUR,
+                '}' => .RCUR,
                 ';' => .SEMICOLON,
                 else => unreachable,
             });

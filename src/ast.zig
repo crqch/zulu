@@ -47,6 +47,7 @@ pub const Expression = union(enum) {
     UnaryMinus: *Expression,
     Variable: []const u8,
     Number: []const u8,
+    Unit,
     Boolean: bool,
     String: []const u8,
     Tuple: []*Expression,
@@ -54,6 +55,11 @@ pub const Expression = union(enum) {
         identifier: []const u8,
         expression: *Expression,
         block: *Expression,
+    },
+    Module: struct {
+        identifier: []const u8,
+        block: *Expression,
+        rest: *Expression,
     },
     Lambda: struct {
         identifier: []const u8,
@@ -120,6 +126,12 @@ pub const AstPrinter = struct {
 
                 try self.printNode(dec.block.*, level + 1);
             },
+            .Module => |mod| {
+                try self.buffer.print(self.allocator, "Module ( {s} )\n", .{mod.identifier});
+
+                try self.printNode(mod.block.*, level + 1);
+                try self.printNode(mod.rest.*, level + 1);
+            },
             .String => |str| {
                 try self.buffer.print(self.allocator, "String\n", .{});
                 try self.buffer.appendNTimes(self.allocator, ' ', level + 1);
@@ -127,6 +139,9 @@ pub const AstPrinter = struct {
             },
             .Number => |num| {
                 try self.buffer.print(self.allocator, "Number( {s} )\n", .{num});
+            },
+            .Unit => {
+                try self.buffer.print(self.allocator, "Unit\n", .{});
             },
             .Boolean => |b| {
                 try self.buffer.print(self.allocator, "Boolean( {s} )\n", .{if (b) "True" else "False"});

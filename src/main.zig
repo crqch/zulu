@@ -334,6 +334,7 @@ fn findTokenByLexemePtr(tokens: []const Token, lexeme: []const u8) ?Token {
 fn findExprLocation(tokens: []const Token, expr: *Expression) ?Token {
     switch (expr.*) {
         .Variable => |v| return findTokenByLexemePtr(tokens, v),
+        .Unit => return null,
         .Number => |n| return findTokenByLexemePtr(tokens, n),
         .String => |s| return findTokenByLexemePtr(tokens, s),
         .Boolean => |b| {
@@ -355,6 +356,7 @@ fn findExprLocation(tokens: []const Token, expr: *Expression) ?Token {
         .Tuple => |val| return findExprLocation(tokens, val[0]),
         .Application => |app| return findExprLocation(tokens, app.callee),
         .MemberAccess => |memberAccess| return findTokenByLexemePtr(tokens, memberAccess.member),
+        .Module => |module| return findTokenByLexemePtr(tokens, module.identifier),
     }
 }
 

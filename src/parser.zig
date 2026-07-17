@@ -16,17 +16,18 @@ tokens: []Token,
 
 const Precedence = struct {
     pub const none: u8 = 0;
-    pub const arrow: u8 = 5; //       =>
-    pub const assignment: u8 = 10; // =
-    pub const tuple: u8 = 20; //      ,
-    pub const logic_or: u8 = 30; //   or
-    pub const logic_and: u8 = 40; //  and
-    pub const equality: u8 = 50; //   ==, !=
-    pub const comparison: u8 = 60; // <, >, <=, >=
-    pub const term: u8 = 70; //       +, -
-    pub const factor: u8 = 80; //     *, /
-    pub const unary: u8 = 90; //      !, -
-    pub const call: u8 = 100; //       (), application
+    pub const arrow: u8 = 5; //           =>
+    pub const assignment: u8 = 10; //     =
+    pub const tuple: u8 = 20; //          ,
+    pub const logic_or: u8 = 30; //       or
+    pub const logic_and: u8 = 40; //      and
+    pub const equality: u8 = 50; //       ==, !=
+    pub const comparison: u8 = 60; //     <, >, <=, >=
+    pub const term: u8 = 70; //           +, -
+    pub const factor: u8 = 80; //         *, /
+    pub const unary: u8 = 90; //          !, -
+    pub const call: u8 = 100; //          (), application
+    pub const memberAccess: u8 = 110; //  .
 };
 
 pub const ParserError = error{
@@ -41,6 +42,8 @@ pub const ParserError = error{
     UNEXPECTED_TOKEN,
     PATTERN_EXPECTED,
     EXPECTED_PROPERTY_NAME,
+    EXPECTED_MODULE_NAME,
+    EXPECTED_MODULE_END,
 };
 
 const PrefixParselet = *const fn (self: *Parser) ParserError!*Expression;
@@ -90,8 +93,39 @@ fn nud(self: *Parser) ParserError!*Expression {
         .LBRA => self.lambdaNud(),
         .KW_IF => self.ifNud(),
         .KW_MATCH => self.matchNud(),
+        .KW_MOD => self.moduleNud(),
         else => error.EXPECTED_EXPRESSION,
     };
+}
+
+fn moduleNud(self: *Parser) ParserError!*Expression {
+    if (!self.matchToken(.IDENT)) return ParserError.EXPECTED_MODULE_NAME;
+    const moduleName = self.tokens[self.current - 1].lexeme;
+
+    try self.expect(.LCUR);
+
+    const moduleExpression = try self.parseExpression(Precedence.none);
+
+    self.expect(.RCUR) catch return ParserError.EXPECTED_MODULE_END;
+
+    const restExpression = self.parseExpression(Precedence.none) catch |err| {
+        if (err == ParserError.EXPECTED_EXPRESSION) return try self.newExpression(.{
+            .Module = .{
+                .identifier = moduleName,
+                .block = moduleExpression,
+                .rest = try self.newExpression(.{ .Unit = {} }),
+            },
+        });
+        return err;
+    };
+
+    return try self.newExpression(Expression{
+        .Module = .{
+            .identifier = moduleName,
+            .block = moduleExpression,
+            .rest = restExpression,
+        },
+    });
 }
 
 fn matchNud(self: *Parser) ParserError!*Expression {
@@ -297,8 +331,20 @@ fn binOpLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*Expression
 
     if (bop == .EQ and self.matchToken(.SEMICOLON)) {
         if (left.* != .Variable) return ParserError.EXPECTED_VARIABLE_AT_DECLARATION;
+        const index = self.current;
 
-        const block = try self.parseExpression(Precedence.none);
+        const block = self.parseExpression(Precedence.none) catch |err| {
+            self.current = index;
+            if (err == ParserError.EXPECTED_EXPRESSION)
+                return try self.newExpression(.{
+                    .Declaration = .{
+                        .identifier = left.Variable,
+                        .expression = right,
+                        .block = try self.newExpression(.{ .Unit = {} }),
+                    },
+                });
+            return err;
+        };
 
         return try self.newExpression(.{
             .Declaration = .{
@@ -364,7 +410,8 @@ fn isAtPrimaryStart(self: *Parser) bool {
         tokenType == .LPAR or
         tokenType == .LBRA or
         tokenType == .BANG or
-        tokenType == .IDENT;
+        tokenType == .IDENT or
+        tokenType == .KW_MOD;
 }
 
 fn previousToken(self: *Parser) Token {

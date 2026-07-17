@@ -11,6 +11,7 @@ nextWildcardId: usize,
 substitutions: std.AutoHashMap(usize, *Type),
 
 pub const Type = union(enum) {
+    Unit,
     Int,
     Float,
     Boolean,
@@ -149,6 +150,7 @@ pub const PrettyPrinter = struct {
 
     fn _prettyPrint(self: *PrettyPrinter, tp: Type, level: u8) ![]const u8 {
         return switch (tp) {
+            .Unit => "unit",
             .Boolean => "bool",
             .Float => "float",
             .Int => "int",
@@ -207,6 +209,9 @@ fn makeFreshTypeSpecific(self: *TypeChecker, tp: Type) !*Type {
 
 fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv) TypeError!*Type {
     switch (expression.*) {
+        .Unit => {
+            return try self.makeFreshTypeSpecific(.Unit);
+        },
         .Number => {
             const freshType = try self.makeFreshType();
             if (std.mem.containsAtLeast(u8, expression.Number, 1, ".")) {
@@ -581,6 +586,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
         },
         .MemberAccess => |memberAccess| {
             _ = memberAccess;
+            return TypeError.UNIMPLEMENTED;
+        },
+        .Module => |module| {
+            _ = module;
             return TypeError.UNIMPLEMENTED;
         },
     }
