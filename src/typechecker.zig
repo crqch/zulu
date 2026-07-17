@@ -2,6 +2,7 @@ const std = @import("std");
 
 const TypeChecker = @This();
 const Expression = @import("./ast.zig").Expression;
+const MatchPattern = @import("./ast.zig").MatchPattern;
 
 allocator: std.mem.Allocator,
 errorContext: ?TypeErrorContext,
@@ -67,7 +68,9 @@ pub const TypeError = error{
     UNEXPECTED_TYPE,
     OUT_OF_MEMORY,
     CANNOT_UNIFY,
-    TYPE_PROMOTION_NOT_IMPLEMENTED,
+    MISSING_MATCH_CASE,
+    UNMATCHED_PATTERN,
+    UNIMPLEMENTED,
 };
 
 const TypeErrorContext = union(enum) {
@@ -538,7 +541,64 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
             expression.*.Lambda.type = lambdaType;
             return lambdaType;
         },
+        .Match => |match| {
+            const scrutineeTp = try self._inferType(match.scrutinee, environment);
+            var caseTypes = std.ArrayList(*Type).initCapacity(self.allocator, match.cases.len) catch return TypeError.OUT_OF_MEMORY;
+
+            for (match.cases) |case| {
+                const freshEnv = try TypeEnv.init(self.allocator, environment);
+
+                const patternTp = try self.inferPattern(freshEnv, case.pattern.*);
+
+                self.unifyTypes(scrutineeTp, patternTp) catch {
+                    return TypeError.UNMATCHED_PATTERN;
+                };
+
+                caseTypes.append(self.allocator, try self._inferType(case.block, freshEnv)) catch return TypeError.OUT_OF_MEMORY;
+            }
+
+            if (caseTypes.items.len == 0) {
+                return TypeError.MISSING_MATCH_CASE;
+            }
+
+            const firstTp = caseTypes.items[0];
+            if (caseTypes.items.len > 1) {
+                for (caseTypes.items[1..], 1..) |caseTp, i| {
+                    self.unifyTypes(firstTp, caseTp) catch {
+                        self.errorContext = TypeErrorContext{
+                            .UNEXPECTED_TYPE = .{
+                                .expectedType = self.allocator.dupe(*Type, &[_]*Type{firstTp}) catch return TypeError.OUT_OF_MEMORY,
+                                .foundType = caseTp,
+                                .context = match.cases[i].block,
+                            },
+                        };
+                        return TypeError.UNEXPECTED_TYPE;
+                    };
+                }
+            }
+
+            return firstTp;
+        },
     }
+}
+
+fn inferPattern(self: *TypeChecker, environment: *TypeEnv, pattern: MatchPattern) TypeError!*Type {
+    return switch (pattern) {
+        .Wildcard => self.freshWildcard(),
+        .Identifier => |ident| {
+            const freshType = try self.freshWildcard();
+            try environment.add(ident, freshType);
+            return freshType;
+        },
+        .Tuple => |tup| {
+            var types = std.ArrayList(*Type).initCapacity(self.allocator, tup.binds.len) catch return TypeError.OUT_OF_MEMORY;
+            for (tup.binds) |pat| {
+                types.append(self.allocator, try self.inferPattern(environment, pat.*)) catch return TypeError.OUT_OF_MEMORY;
+            }
+            return try self.makeFreshTypeSpecific(.{ .Tuple = types.items });
+        },
+        .Cons => TypeError.UNIMPLEMENTED,
+    };
 }
 
 fn applySubstitutions(self: *TypeChecker, tp: *Type) *Type {
@@ -573,8 +633,20 @@ fn unifyTypes(self: *TypeChecker, rawLeft: *Type, rawRight: *Type) !void {
         return TypeError.CANNOT_UNIFY;
     }
 
-    if (left.* == .Lambda) {
-        try self.unifyTypes(left.Lambda.argType, right.Lambda.argType);
-        try self.unifyTypes(left.Lambda.returnType, right.Lambda.returnType);
+    switch (left.*) {
+        .Lambda => {
+            try self.unifyTypes(left.Lambda.argType, right.Lambda.argType);
+            try self.unifyTypes(left.Lambda.returnType, right.Lambda.returnType);
+        },
+        .Tuple => |leftTypes| {
+            const rightTypes = right.Tuple;
+            if (leftTypes.len != rightTypes.len) {
+                return TypeError.CANNOT_UNIFY;
+            }
+            for (leftTypes, rightTypes) |l, r| {
+                try self.unifyTypes(l, r);
+            }
+        },
+        else => {},
     }
 }
