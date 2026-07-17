@@ -1,0 +1,26 @@
+_=match 2,4
+    | a, b => a*b
+    | _ => 0
+;
+
+Optional *=
+    | Some . int
+    | None
+;
+
+some=Some 4;
+
+match some
+    | None => 0
+    | Some x => x
+;
+
+bind=[m f;
+    match m
+        | Some x => f x
+        | None   => None
+];
+
+match bind (Some 42) [x;x - 19]
+    | None   => 0
+    | Some x => x
