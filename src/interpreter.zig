@@ -360,6 +360,10 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
 
             return InterpreterError.MISSING_MATCH_CASE;
         },
+        .MemberAccess => |memberAccess| {
+            _ = memberAccess;
+            return InterpreterError.UNIMPLEMENTED;
+        },
     }
 }
 

@@ -114,7 +114,16 @@ pub fn printTokens(self: *Lexer) LexerError![]const u8 {
 fn scanToken(self: *Lexer) LexerError!void {
     const char = self.advance();
     switch (char) {
-        '+', '-', '/', '*', '=', '!', '|', '(', ')', '[', ']', ',', ';', '>', '<' => {
+        '+', '-', '/', '*', '=', '!', '|', '(', ')', '[', ']', ',', ';', '>', '<', '.' => {
+            if (char == '.') {
+                if (!self.isAtEnd() and std.ascii.isDigit(self.peek())) {
+                    try self.number(char);
+                    return;
+                } else {
+                    return try self.addToken(.DOT);
+                }
+            }
+
             return try self.addToken(switch (char) {
                 '+' => .PLUS,
                 '-' => .MINUS,

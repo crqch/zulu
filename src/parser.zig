@@ -40,6 +40,7 @@ pub const ParserError = error{
     OUT_OF_MEMORY,
     UNEXPECTED_TOKEN,
     PATTERN_EXPECTED,
+    EXPECTED_PROPERTY_NAME,
 };
 
 const PrefixParselet = *const fn (self: *Parser) ParserError!*Expression;
@@ -264,8 +265,21 @@ fn led(tokenType: TokenType) ?InfixParselet {
         .KW_AND => .{ .precedence = Precedence.logic_and, .led = binOpLed },
         .KW_OR => .{ .precedence = Precedence.logic_or, .led = binOpLed },
         .COMMA => .{ .precedence = Precedence.tuple, .led = tupleLed },
+        .DOT => .{ .precedence = Precedence.memberAccess, .led = memberAccessLed },
         else => null,
     };
+}
+
+fn memberAccessLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*Expression {
+    _ = minBp;
+    if (!self.matchToken(.IDENT)) return ParserError.EXPECTED_PROPERTY_NAME;
+
+    const propertyName = self.previousToken().lexeme;
+
+    return try self.newExpression(Expression{ .MemberAccess = .{
+        .object = left,
+        .member = propertyName,
+    } });
 }
 
 fn applicationLed(self: *Parser, left: *Expression) ParserError!*Expression {

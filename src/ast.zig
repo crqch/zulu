@@ -73,6 +73,10 @@ pub const Expression = union(enum) {
         satisfyBlock: *Expression,
         elseBlock: *Expression,
     },
+    MemberAccess: struct {
+        object: *Expression,
+        member: []const u8,
+    },
 };
 
 pub const AstPrinter = struct {
@@ -171,6 +175,11 @@ pub const AstPrinter = struct {
                 try self.buffer.print(self.allocator, "UnaryMinus\n", .{});
 
                 try self.printNode(opposite.*, level + 1);
+            },
+            .MemberAccess => |memberAccess| {
+                try self.buffer.print(self.allocator, "MemberAccess ( {s} )\n", .{memberAccess.member});
+
+                try self.printNode(memberAccess.object.*, level + 1);
             },
         }
     }

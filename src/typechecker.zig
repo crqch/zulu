@@ -579,6 +579,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
 
             return firstTp;
         },
+        .MemberAccess => |memberAccess| {
+            _ = memberAccess;
+            return TypeError.UNIMPLEMENTED;
+        },
     }
 }
 
