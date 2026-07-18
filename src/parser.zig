@@ -122,6 +122,14 @@ fn importNud(self: *Parser) ParserError!*Expression {
         return ParserError.ENVIRONMENT_NOT_FOUND;
     }
 
+    if (self.matchToken(.AT)) {
+        const block = try self.parseExpression(Precedence.none);
+        return try self.newExpression(.{ .UseEnvironment = .{
+            .environment = try self.newExpression(.{ .Import = filePath }),
+            .block = block,
+        } });
+    }
+
     return try self.newExpression(.{ .Import = filePath });
 }
 

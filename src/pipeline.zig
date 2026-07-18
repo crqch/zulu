@@ -207,6 +207,9 @@ pub fn run(self: *Pipeline, sharedContext: *SharedContext, filePath: []const u8,
             error.IMPORT_FILE_NOT_FOUND => {
                 std.debug.print("Import file not found.\n", .{});
             },
+            error.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION => {
+                std.debug.print("Expected environment on env expansion.\n", .{});
+            },
         }
         if (interpreter.last_expression) |last_expr| {
             if (findExprLocation(tokens, last_expr)) |token| {
@@ -258,6 +261,7 @@ fn findExprLocation(tokens: []const Token, expr: *Expression) ?Token {
         .MemberAccess => |memberAccess| return findTokenByLexemePtr(tokens, memberAccess.member),
         .Module => |module| return findTokenByLexemePtr(tokens, module.identifier),
         .CurrentEnvironment => return null,
+        .UseEnvironment => |env| return findExprLocation(tokens, env.environment),
     }
 }
 

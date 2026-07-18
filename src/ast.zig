@@ -75,6 +75,10 @@ pub const Expression = union(enum) {
     },
 
     CurrentEnvironment,
+    UseEnvironment: struct {
+        environment: *Expression,
+        block: *Expression,
+    },
     Declaration: struct {
         identifier: []const u8,
         expression: *Expression,
@@ -154,6 +158,11 @@ pub const AstPrinter = struct {
             },
             .CurrentEnvironment => {
                 try self.buffer.print(self.allocator, "CurrentEnvironment\n", .{});
+            },
+            .UseEnvironment => |env| {
+                try self.buffer.print(self.allocator, "UseEnvironment\n", .{});
+                try self.printNode(env.environment.*, level + 1);
+                try self.printNode(env.block.*, level + 1);
             },
             .Boolean => |b| {
                 try self.buffer.print(self.allocator, "Boolean( {s} )\n", .{if (b) "True" else "False"});

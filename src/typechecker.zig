@@ -66,6 +66,14 @@ const TypeEnv = struct {
 
         return null;
     }
+
+    fn expand(self: *TypeEnv, env: *TypeEnv) !void {
+        if (self.parent) |parent_env| {
+            return try parent_env.expand(env);
+        }
+
+        self.parent = env;
+    }
 };
 
 pub const TypeError = error{
@@ -85,6 +93,7 @@ pub const TypeError = error{
     MEMBER_ACCESS_ON_NON_ENVIRONMENT,
     EXPECTED_ENVIRONMENT_TYPE_ON_MODULE_END,
     SHADOWING_BY_MODULE_NOT_ALLOWED,
+    EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION,
 
     UNIMPLEMENTED,
     IMPORT_FILE_NOT_FOUND,
@@ -665,6 +674,12 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
         },
         .CurrentEnvironment => {
             return try self.makeFreshTypeSpecific(.{ .Environment = environment });
+        },
+        .UseEnvironment => |env| {
+            const typeEnv = try self._inferType(env.environment, environment);
+            if (typeEnv.* != .Environment) return TypeError.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION;
+            try environment.expand(typeEnv.Environment);
+            return try self._inferType(env.block, environment);
         },
     }
 }

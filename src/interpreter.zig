@@ -55,6 +55,14 @@ const Env = struct {
 
         return null;
     }
+
+    fn expand(self: *Env, env: *Env) !void {
+        if (self.parent) |parent_env| {
+            return try parent_env.expand(env);
+        }
+
+        self.parent = env;
+    }
 };
 
 const ValueType = enum {
@@ -413,6 +421,12 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 .Environment = environment,
             };
         },
+        .UseEnvironment => |env| {
+            const evaluatedEnv = try self._eval(env.environment, environment);
+            if (evaluatedEnv != .Environment) return InterpreterError.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION;
+            try environment.expand(evaluatedEnv.Environment);
+            return try self._eval(env.block, environment);
+        },
         .MemberAccess => |memberAccess| {
             const objectValue = try self._eval(memberAccess.object, environment);
             if (objectValue != .Environment) return InterpreterError.MEMBER_ACCESS_ON_NON_ENVIRONMENT;
@@ -495,6 +509,7 @@ const InterpreterError = error{
     PROPERTY_NOT_FOUND_ON_OBJECT,
     MEMBER_ACCESS_ON_NON_ENVIRONMENT,
     EXPECTED_CURRENT_ENVIRONMENT_ON_MODULE_END,
+    EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION,
 
     IMPORT_FILE_NOT_FOUND,
 

@@ -17,6 +17,7 @@ pub const TokenType = enum {
     MINUS,
     SLASH,
     ASTERISK,
+    AT,
     DOT,
     COMMA,
     NOTEQ,
@@ -120,7 +121,7 @@ pub fn printTokens(self: *Lexer) LexerError![]const u8 {
 fn scanToken(self: *Lexer) LexerError!void {
     const char = self.advance();
     switch (char) {
-        '+', '-', '/', '*', '=', '!', '|', '(', ')', '[', ']', '{', '}', ',', ';', '>', '<', '.' => {
+        '+', '-', '/', '*', '@', '=', '!', '|', '(', ')', '[', ']', '{', '}', ',', ';', '>', '<', '.' => {
             if (char == '.') {
                 if (!self.isAtEnd() and std.ascii.isDigit(self.peek())) {
                     try self.number(char);
@@ -134,6 +135,7 @@ fn scanToken(self: *Lexer) LexerError!void {
                 '+' => .PLUS,
                 '-' => .MINUS,
                 '*' => .ASTERISK,
+                '@' => .AT,
                 ',' => .COMMA,
                 '|' => .PIPE,
                 '/' => if (self.match('/')) .SLASHSLASH else .SLASH,
