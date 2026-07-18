@@ -11,18 +11,21 @@ nextWildcardId: usize,
 substitutions: std.AutoHashMap(usize, *Type),
 
 pub const Type = union(enum) {
+    Wildcard: usize,
+
     Unit,
-    Int,
-    Float,
     Boolean,
+    Float,
+    Int,
     String,
-    Tuple: []*Type,
+
     Lambda: struct {
         argType: *Type,
         returnType: *Type,
     },
-    Wildcard: usize,
+
     Environment: *TypeEnv,
+    Tuple: []*Type,
 };
 
 const TypeEnv = struct {

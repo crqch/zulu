@@ -55,26 +55,31 @@ const Env = struct {
 
 const ValueType = enum {
     Unit,
-    Integer,
-    Float,
     Boolean,
+    Float,
+    Integer,
     String,
-    Tuple,
+
     Closure,
+
+    Tuple,
     Environment,
 };
 
 pub const Value = union(ValueType) {
     Unit,
-    Integer: i64,
-    Float: f64,
+
     Boolean: bool,
+    Float: f64,
+    Integer: i64,
     String: []const u8,
-    Tuple: []Value,
+
     Closure: struct {
         node: *Expression,
         env: *Env,
     },
+
+    Tuple: []Value,
     Environment: *Env,
 };
 
@@ -461,16 +466,22 @@ fn matchesPattern(self: *Interpreter, pattern: MatchPattern, value: Value) Inter
 
 const InterpreterError = error{
     UNEXPECTED_TYPE,
+    TYPE_PROMOTION_NOT_IMPLEMENTED,
+
     FLOAT_PARSING_FAILED,
     INT_PARSING_FAILED,
+
     MEMORY_ALLOCATION_FAILED,
+
     DIVISION_BY_ZERO,
+
     UNBOUND_VARIABLE,
     ENVIRONMENT_MAP_ERROR,
     ENVIRONMENT_INITALIZATION_ERROR,
-    TYPE_PROMOTION_NOT_IMPLEMENTED,
+
     UNMATCHED_PATTERN,
     MISSING_MATCH_CASE,
+
     PROPERTY_NOT_FOUND_ON_OBJECT,
     MEMBER_ACCESS_ON_NON_ENVIRONMENT,
     EXPECTED_CURRENT_ENVIRONMENT_ON_MODULE_END,

@@ -26,6 +26,7 @@ pub const MatchPattern = union(enum) {
         head: *MatchPattern,
         rest: *MatchPattern,
     },
+    Identifier: []const u8,
     Tuple: struct {
         binds: []*MatchPattern,
     },
@@ -38,6 +39,13 @@ pub const MatchCase = struct {
 };
 
 pub const Expression = union(enum) {
+    Boolean: bool,
+    Number: []const u8,
+    String: []const u8,
+    Tuple: []*Expression,
+    Unit,
+    Variable: []const u8,
+
     BinaryOperation: struct {
         operation: Bop,
         left: *Expression,
@@ -45,44 +53,41 @@ pub const Expression = union(enum) {
     },
     Not: *Expression,
     UnaryMinus: *Expression,
-    Variable: []const u8,
-    Number: []const u8,
-    Unit,
-    CurrentEnvironment,
-    Boolean: bool,
-    String: []const u8,
-    Tuple: []*Expression,
-    Declaration: struct {
-        identifier: []const u8,
+
+    Condition: struct {
         expression: *Expression,
-        block: *Expression,
+        satisfyBlock: *Expression,
+        elseBlock: *Expression,
     },
-    Module: struct {
-        identifier: []const u8,
-        block: *Expression,
-        rest: *Expression,
+    Match: struct {
+        scrutinee: *Expression,
+        cases: []MatchCase,
+    },
+
+    Application: struct {
+        callee: *Expression,
+        value: *Expression,
     },
     Lambda: struct {
         identifier: []const u8,
         block: *Expression,
         type: ?*Type,
     },
-    Match: struct {
-        scrutinee: *Expression,
-        cases: []MatchCase,
-    },
-    Application: struct {
-        callee: *Expression,
-        value: *Expression,
-    },
-    Condition: struct {
+
+    CurrentEnvironment,
+    Declaration: struct {
+        identifier: []const u8,
         expression: *Expression,
-        satisfyBlock: *Expression,
-        elseBlock: *Expression,
+        block: *Expression,
     },
     MemberAccess: struct {
         object: *Expression,
         member: []const u8,
+    },
+    Module: struct {
+        identifier: []const u8,
+        block: *Expression,
+        rest: *Expression,
     },
 };
 
