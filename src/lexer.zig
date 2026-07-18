@@ -131,6 +131,15 @@ fn scanToken(self: *Lexer) LexerError!void {
                 }
             }
 
+            if (char == '@') {
+                if (!self.isAtEnd() and isValidIdentChar(self.peek())) {
+                    try self.identifier();
+                    return;
+                } else {
+                    return try self.addToken(.AT);
+                }
+            }
+
             return try self.addToken(switch (char) {
                 '+' => .PLUS,
                 '-' => .MINUS,

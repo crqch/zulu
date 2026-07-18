@@ -678,8 +678,14 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
         .UseEnvironment => |env| {
             const typeEnv = try self._inferType(env.environment, environment);
             if (typeEnv.* != .Environment) return TypeError.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION;
-            try environment.expand(typeEnv.Environment);
-            return try self._inferType(env.block, environment);
+            
+            var temp_env = try TypeEnv.init(self.allocator, environment);
+            var it = typeEnv.Environment.bindings.iterator();
+            while (it.next()) |entry| {
+                try temp_env.add(entry.key_ptr.*, entry.value_ptr.*);
+            }
+            
+            return try self._inferType(env.block, temp_env);
         },
     }
 }

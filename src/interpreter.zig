@@ -424,8 +424,14 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
         .UseEnvironment => |env| {
             const evaluatedEnv = try self._eval(env.environment, environment);
             if (evaluatedEnv != .Environment) return InterpreterError.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION;
-            try environment.expand(evaluatedEnv.Environment);
-            return try self._eval(env.block, environment);
+            
+            var temp_env = try Env.init(self.allocator, environment);
+            var it = evaluatedEnv.Environment.bindings.iterator();
+            while (it.next()) |entry| {
+                try temp_env.add(entry.key_ptr.*, entry.value_ptr.*);
+            }
+            
+            return try self._eval(env.block, temp_env);
         },
         .MemberAccess => |memberAccess| {
             const objectValue = try self._eval(memberAccess.object, environment);
