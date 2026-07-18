@@ -157,7 +157,7 @@ pub const Testing = struct {
         var lexer = try Lexer.init(testAllocator, content);
         const tokens = try lexer.scanTokens();
 
-        var parser = Parser.init(testAllocator, tokens);
+        var parser = Parser.init(testAllocator, tokens, null);
 
         const expr = try parser.parse();
 
@@ -165,7 +165,7 @@ pub const Testing = struct {
 
         const trimmedExpectedTp = std.mem.trim(u8, expectedTp, " \n");
 
-        var typeChecker = TypeChecker.init(testAllocator);
+        var typeChecker = TypeChecker.init(testAllocator, null);
         const parsedTp = try typeChecker.inferType(expr);
 
         const printedTp = try TypeChecker.PrettyPrinter.prettyPrint(testAllocator, typeChecker.finalizeType(parsedTp).*);
@@ -256,14 +256,14 @@ pub const Testing = struct {
         var lexer = try Lexer.init(testAllocator, content);
         const tokens = try lexer.scanTokens();
 
-        var parser = Parser.init(testAllocator, tokens);
+        var parser = Parser.init(testAllocator, tokens, null);
         const expectedError = iterator.next() orelse return error.NO_EXPECTED_ERROR_CODE;
 
         const trimmedError = std.mem.trim(u8, expectedError, " \n");
 
         const expr = try parser.parse();
 
-        var typeChecker = TypeChecker.init(testAllocator);
+        var typeChecker = TypeChecker.init(testAllocator, null);
 
         const tp = typeChecker.inferType(expr) catch |err| {
             if (std.mem.eql(u8, @errorName(err), trimmedError)) {

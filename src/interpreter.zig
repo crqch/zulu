@@ -4,13 +4,17 @@ const Expression = @import("./ast.zig").Expression;
 const MatchPattern = @import("./ast.zig").MatchPattern;
 const Bop = @import("./ast.zig").Bop;
 const TypeChecker = @import("./typechecker.zig");
+const SharedContext = @import("./shared.zig");
+const readFileContents = @import("./root.zig").readFileContents;
 
 allocator: std.mem.Allocator,
+sharedContext: *SharedContext,
 last_expression: ?*Expression = null,
 
-pub fn init(allocator: std.mem.Allocator) Interpreter {
+pub fn init(allocator: std.mem.Allocator, sharedContext: *SharedContext) Interpreter {
     return Interpreter{
         .allocator = allocator,
+        .sharedContext = sharedContext,
         .last_expression = null,
     };
 }
@@ -164,6 +168,13 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 return InterpreterError.INT_PARSING_FAILED;
             };
             return Value{ .Integer = int };
+        },
+        .Import => |filePath| {
+            const ret = self.sharedContext.get(filePath) catch {
+                return InterpreterError.IMPORT_FILE_NOT_FOUND;
+            };
+
+            return ret.value orelse return InterpreterError.IMPORT_FILE_NOT_FOUND;
         },
         .String => |str| {
             return Value{
@@ -406,7 +417,6 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             const objectValue = try self._eval(memberAccess.object, environment);
             if (objectValue != .Environment) return InterpreterError.MEMBER_ACCESS_ON_NON_ENVIRONMENT;
 
-            std.log.info("{s}\n", .{memberAccess.member});
             const memberValue = objectValue.Environment.get(memberAccess.member);
 
             if (memberValue) |val| return val;
@@ -485,6 +495,8 @@ const InterpreterError = error{
     PROPERTY_NOT_FOUND_ON_OBJECT,
     MEMBER_ACCESS_ON_NON_ENVIRONMENT,
     EXPECTED_CURRENT_ENVIRONMENT_ON_MODULE_END,
+
+    IMPORT_FILE_NOT_FOUND,
 
     UNIMPLEMENTED,
 };

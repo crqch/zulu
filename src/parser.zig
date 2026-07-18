@@ -7,12 +7,14 @@ const Bop = ast.Bop;
 const lexer = @import("lexer.zig");
 const Token = lexer.Token;
 const TokenType = lexer.TokenType;
+const SharedContext = @import("./shared.zig");
 
 const Parser = @This();
 
 allocator: std.mem.Allocator,
 current: usize = 0,
 tokens: []Token,
+sharedContext: ?*SharedContext,
 
 const Precedence = struct {
     pub const none: u8 = 0;
@@ -44,6 +46,9 @@ pub const ParserError = error{
     EXPECTED_PROPERTY_NAME,
     EXPECTED_MODULE_NAME,
     EXPECTED_MODULE_END,
+    FILE_NOT_FOUND,
+    ENVIRONMENT_NOT_FOUND,
+    COMPILE_ERROR,
 };
 
 const PrefixParselet = *const fn (self: *Parser) ParserError!*Expression;
@@ -53,8 +58,8 @@ const InfixParselet = struct {
     led: *const fn (self: *Parser, left: *Expression, precedence: u8) ParserError!*Expression,
 };
 
-pub fn init(allocator: std.mem.Allocator, tokens: []Token) Parser {
-    return Parser{ .allocator = allocator, .tokens = tokens };
+pub fn init(allocator: std.mem.Allocator, tokens: []Token, sharedContext: ?*SharedContext) Parser {
+    return Parser{ .allocator = allocator, .tokens = tokens, .sharedContext = sharedContext };
 }
 
 pub fn parse(self: *Parser) ParserError!*Expression {
@@ -94,8 +99,30 @@ fn nud(self: *Parser) ParserError!*Expression {
         .KW_IF => self.ifNud(),
         .KW_MATCH => self.matchNud(),
         .KW_MOD => self.moduleNud(),
+        .KW_IMPORT => self.importNud(),
         else => error.EXPECTED_EXPRESSION,
     };
+}
+
+fn importNud(self: *Parser) ParserError!*Expression {
+    const token = self.tokens[self.current];
+    try self.expect(.STRING);
+
+    const filePath = try self.stringOfLexeme(token.lexeme);
+
+    if (self.sharedContext) |sharedContext| {
+        sharedContext.load(filePath) catch |err| {
+            self.current -= 1;
+            switch (err) {
+                error.FileNotFound => return ParserError.FILE_NOT_FOUND,
+                else => return ParserError.COMPILE_ERROR,
+            }
+        };
+    } else {
+        return ParserError.ENVIRONMENT_NOT_FOUND;
+    }
+
+    return try self.newExpression(.{ .Import = filePath });
 }
 
 fn moduleNud(self: *Parser) ParserError!*Expression {
@@ -346,7 +373,7 @@ fn binOpLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*Expression
                     .Declaration = .{
                         .identifier = left.Variable,
                         .expression = right,
-                        .block = try self.newExpression(.{ .Unit = {} }),
+                        .block = try self.newExpression(.{ .CurrentEnvironment = {} }),
                     },
                 });
             return err;

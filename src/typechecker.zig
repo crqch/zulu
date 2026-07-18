@@ -1,11 +1,13 @@
 const std = @import("std");
 
-const TypeChecker = @This();
 const Expression = @import("./ast.zig").Expression;
 const MatchPattern = @import("./ast.zig").MatchPattern;
+const SharedContext = @import("./shared.zig");
 
+const TypeChecker = @This();
 allocator: std.mem.Allocator,
 errorContext: ?TypeErrorContext,
+sharedContext: ?*SharedContext,
 
 nextWildcardId: usize,
 substitutions: std.AutoHashMap(usize, *Type),
@@ -67,19 +69,25 @@ const TypeEnv = struct {
 };
 
 pub const TypeError = error{
-    UNBOUND_VARIABLE,
+    OUT_OF_MEMORY,
     ENVIRONMENT_INITALIZATION_ERROR,
     ENVIRONMENT_MAP_ERROR,
+
+    UNBOUND_VARIABLE,
+
     UNEXPECTED_TYPE,
-    OUT_OF_MEMORY,
     CANNOT_UNIFY,
+
     MISSING_MATCH_CASE,
     UNMATCHED_PATTERN,
+
     PROPERTY_NOT_FOUND_ON_OBJECT,
     MEMBER_ACCESS_ON_NON_ENVIRONMENT,
     EXPECTED_ENVIRONMENT_TYPE_ON_MODULE_END,
     SHADOWING_BY_MODULE_NOT_ALLOWED,
+
     UNIMPLEMENTED,
+    IMPORT_FILE_NOT_FOUND,
 };
 
 const TypeErrorContext = union(enum) {
@@ -93,10 +101,11 @@ const TypeErrorContext = union(enum) {
     },
 };
 
-pub fn init(allocator: std.mem.Allocator) TypeChecker {
+pub fn init(allocator: std.mem.Allocator, sharedContext: ?*SharedContext) TypeChecker {
     return TypeChecker{
         .allocator = allocator,
         .errorContext = null,
+        .sharedContext = sharedContext,
 
         .nextWildcardId = 0,
         .substitutions = std.AutoHashMap(usize, *Type).init(allocator),
@@ -253,6 +262,16 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
             }
 
             return freshType;
+        },
+        .Import => |filePath| {
+            if (self.sharedContext) |sc| {
+                const ret = sc.get(filePath) catch {
+                    return TypeError.IMPORT_FILE_NOT_FOUND;
+                };
+                return ret.type orelse return TypeError.IMPORT_FILE_NOT_FOUND;
+            } else {
+                return TypeError.ENVIRONMENT_INITALIZATION_ERROR;
+            }
         },
         .Boolean => return {
             const freshType = try self.makeFreshType();

@@ -9,6 +9,7 @@ pub const Expression = @import("./ast.zig").Expression;
 pub const AstPrinter = @import("./ast.zig").AstPrinter;
 pub const TypeChecker = @import("./typechecker.zig");
 pub const Interpreter = @import("./interpreter.zig");
+pub const SharedContext = @import("./shared.zig");
 
 pub const ansi = struct {
     pub const reset = "\x1b[0m";

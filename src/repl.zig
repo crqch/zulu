@@ -1,8 +1,8 @@
 const std = @import("std");
 
 const zulu = @import("zulu");
-const pipeline = @import("./main.zig").pipeline;
 const ansi = zulu.ansi;
+const SharedContext = zulu.SharedContext;
 const Options = zulu.Options;
 const Interpreter = zulu.Interpreter;
 
@@ -11,12 +11,14 @@ const Repl = @This();
 io: std.Io,
 allocator: std.mem.Allocator,
 options: Options,
+sharedContext: SharedContext,
 
-pub fn init(io: std.Io, allocator: std.mem.Allocator, options: Options) Repl {
+pub fn init(io: std.Io, allocator: std.mem.Allocator, options: Options) !Repl {
     return Repl{
         .io = io,
         .allocator = allocator,
         .options = options,
+        .sharedContext = try SharedContext.init(allocator, io, options),
     };
 }
 
@@ -29,6 +31,8 @@ pub fn run(self: *Repl) !void {
 
     var stdoutWriter = std.Io.File.stdout().writer(self.io, &stdoutBuffer);
     const stdout = &stdoutWriter.interface;
+
+    defer self.sharedContext.deinit();
 
     try stdout.flush();
 
@@ -59,19 +63,21 @@ pub fn run(self: *Repl) !void {
 
         var arena = std.heap.ArenaAllocator.init(self.allocator);
 
-        const value = pipeline(arena.allocator(), line, self.options) catch {
+        const ret = self.sharedContext.pipeline.run(&self.sharedContext, "repl", line, self.options) catch {
             arena.deinit();
             continue;
         };
 
-        if (value) |val| {
-            const printedValue = Interpreter.printValue(arena.allocator(), val) catch {
-                arena.deinit();
-                continue;
-            };
+        if (ret) |r| {
+            if (r.value) |val| {
+                const printedValue = Interpreter.printValue(arena.allocator(), val) catch {
+                    arena.deinit();
+                    continue;
+                };
 
-            try stdout.print("{s}\n", .{printedValue});
-            try stdout.flush();
+                try stdout.print("{s}\n", .{printedValue});
+                try stdout.flush();
+            }
         }
 
         arena.deinit();

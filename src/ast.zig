@@ -21,7 +21,6 @@ pub const Bop = enum {
 };
 
 pub const MatchPattern = union(enum) {
-    Identifier: []const u8,
     Cons: struct {
         head: *MatchPattern,
         rest: *MatchPattern,
@@ -40,6 +39,7 @@ pub const MatchCase = struct {
 
 pub const Expression = union(enum) {
     Boolean: bool,
+    Import: []const u8,
     Number: []const u8,
     String: []const u8,
     Tuple: []*Expression,
@@ -145,6 +145,9 @@ pub const AstPrinter = struct {
             },
             .Number => |num| {
                 try self.buffer.print(self.allocator, "Number( {s} )\n", .{num});
+            },
+            .Import => |name| {
+                try self.buffer.print(self.allocator, "Import( {s} )\n", .{name});
             },
             .Unit => {
                 try self.buffer.print(self.allocator, "Unit\n", .{});

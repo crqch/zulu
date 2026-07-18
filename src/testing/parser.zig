@@ -156,7 +156,7 @@ pub const Testing = struct {
         var lexer = try Lexer.init(testAllocator, content);
         const tokens = try lexer.scanTokens();
 
-        var parser = Parser.init(testAllocator, tokens);
+        var parser = Parser.init(testAllocator, tokens, null);
 
         const expr = try parser.parse();
 
@@ -252,7 +252,7 @@ pub const Testing = struct {
         var lexer = try Lexer.init(testAllocator, content);
         const tokens = try lexer.scanTokens();
 
-        var parser = Parser.init(testAllocator, tokens);
+        var parser = Parser.init(testAllocator, tokens, null);
         const expectedError = iterator.next() orelse return error.NO_EXPECTED_ERROR_CODE;
 
         const trimmedError = std.mem.trim(u8, expectedError, " \n");
