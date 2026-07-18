@@ -5,6 +5,7 @@ const Lexer = zulu.Lexer;
 const Parser = zulu.Parser;
 const TypeChecker = zulu.TypeChecker;
 const AstPrinter = zulu.AstPrinter;
+const readFileContents = zulu.readFileContents;
 
 const ansi = zulu.ansi;
 
@@ -140,21 +141,9 @@ pub const Testing = struct {
         return stats;
     }
 
-    fn readFileContents(self: *Testing, filePath: []const u8) ![]const u8 {
-        var file = try std.Io.Dir.cwd().openFile(self.io, filePath, .{ .mode = .read_only });
-        defer file.close(self.io);
-
-        var fileReader = file.reader(self.io, &.{});
-
-        const maxFileSize = 1024 * 1024 * 10;
-        const contents = fileReader.interface.allocRemaining(self.allocator, .limited(maxFileSize));
-
-        return contents;
-    }
-
     fn runPassTest(self: *Testing, filePath: []const u8, failures: *std.ArrayList(Failure)) !TestStatus {
         errdefer std.log.debug("Evaluating test {s}", .{filePath});
-        const fileContent = try self.readFileContents(filePath);
+        const fileContent = try readFileContents(self.allocator, self.io, filePath);
         errdefer std.log.debug("Content of the test:\n{s}", .{fileContent});
 
         var arena = std.heap.ArenaAllocator.init(self.allocator);
@@ -253,7 +242,7 @@ pub const Testing = struct {
 
     fn runFailTest(self: *Testing, filePath: []const u8, failures: *std.ArrayList(Failure)) !TestStatus {
         errdefer std.log.debug("Evaluating test {s}", .{filePath});
-        const fileContent = try self.readFileContents(filePath);
+        const fileContent = try readFileContents(self.allocator, self.io, filePath);
         errdefer std.log.debug("Content of the test:\n{s}", .{fileContent});
 
         var arena = std.heap.ArenaAllocator.init(self.allocator);

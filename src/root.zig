@@ -43,4 +43,16 @@ pub const Options = struct {
     };
 };
 
+pub fn readFileContents(allocator: std.mem.Allocator, io: std.Io, filePath: []const u8) ![]const u8 {
+    var file = try std.Io.Dir.cwd().openFile(io, filePath, .{ .mode = .read_only });
+    defer file.close(io);
+
+    var fileReader = file.reader(io, &.{});
+
+    const maxFileSize = 1024 * 1024 * 10;
+    const contents = fileReader.interface.allocRemaining(allocator, .limited(maxFileSize));
+
+    return contents;
+}
+
 test "run all tests" {}
