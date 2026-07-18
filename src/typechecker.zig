@@ -135,6 +135,17 @@ pub fn finalizeType(self: *TypeChecker, tp: *Type) *Type {
             resolved.Lambda.argType = self.finalizeType(resolved.Lambda.argType);
             resolved.Lambda.returnType = self.finalizeType(resolved.Lambda.returnType);
         },
+        .Environment => |env| {
+            var it = env.bindings.iterator();
+            while (it.next()) |entry| {
+                entry.value_ptr.* = self.finalizeType(entry.value_ptr.*);
+            }
+        },
+        .Tuple => |types| {
+            for (types, 0..) |t, i| {
+                types[i] = self.finalizeType(t);
+            }
+        },
         else => {},
     }
 
@@ -645,14 +656,16 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
             return firstTp;
         },
         .MemberAccess => |memberAccess| {
-            const objectType = try self._inferType(memberAccess.object, environment);
+            const objectType = self.applySubstitutions(try self._inferType(memberAccess.object, environment));
 
             if (objectType.* != .Environment) return TypeError.MEMBER_ACCESS_ON_NON_ENVIRONMENT;
 
             const memberType = objectType.Environment.get(memberAccess.member);
 
             if (memberType) |memberTp| {
-                return memberTp;
+                var cache = std.AutoHashMap(usize, *Type).init(self.allocator);
+                defer cache.deinit();
+                return try self.freshenType(memberTp, &cache);
             }
 
             return TypeError.PROPERTY_NOT_FOUND_ON_OBJECT;
@@ -680,9 +693,13 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
             if (typeEnv.* != .Environment) return TypeError.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION;
             
             var temp_env = try TypeEnv.init(self.allocator, environment);
+            var cache = std.AutoHashMap(usize, *Type).init(self.allocator);
+            defer cache.deinit();
+
             var it = typeEnv.Environment.bindings.iterator();
             while (it.next()) |entry| {
-                try temp_env.add(entry.key_ptr.*, entry.value_ptr.*);
+                const freshVal = try self.freshenType(entry.value_ptr.*, &cache);
+                try temp_env.add(entry.key_ptr.*, freshVal);
             }
             
             return try self._inferType(env.block, temp_env);
@@ -720,7 +737,67 @@ fn applySubstitutions(self: *TypeChecker, tp: *Type) *Type {
     return tp;
 }
 
-fn unifyTypes(self: *TypeChecker, rawLeft: *Type, rawRight: *Type) !void {
+fn occursInType(self: *TypeChecker, wildcardId: usize, tp: *Type) bool {
+    const resolved = self.applySubstitutions(tp);
+    switch (resolved.*) {
+        .Wildcard => |id| return id == wildcardId,
+        .Lambda => |lam| {
+            return self.occursInType(wildcardId, lam.argType) or self.occursInType(wildcardId, lam.returnType);
+        },
+        .Tuple => |types| {
+            for (types) |t| {
+                if (self.occursInType(wildcardId, t)) return true;
+            }
+            return false;
+        },
+        .Environment => |env| {
+            var it = env.bindings.iterator();
+            while (it.next()) |entry| {
+                if (self.occursInType(wildcardId, entry.value_ptr.*)) return true;
+            }
+            return false;
+        },
+        else => return false,
+    }
+}
+
+fn freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Type)) TypeError!*Type {
+    const resolved = self.applySubstitutions(tp);
+    switch (resolved.*) {
+        .Wildcard => |id| {
+            if (cache.get(id)) |fresh| {
+                return fresh;
+            }
+            const fresh = self.freshWildcard() catch return TypeError.OUT_OF_MEMORY;
+            cache.put(id, fresh) catch return TypeError.OUT_OF_MEMORY;
+            return fresh;
+        },
+        .Lambda => |lam| {
+            const freshArg = try self.freshenType(lam.argType, cache);
+            const freshRet = try self.freshenType(lam.returnType, cache);
+            return self.makeFreshTypeSpecific(.{ .Lambda = .{ .argType = freshArg, .returnType = freshRet } }) catch return TypeError.OUT_OF_MEMORY;
+        },
+        .Tuple => |types| {
+            const freshTypes = self.allocator.alloc(*Type, types.len) catch return TypeError.OUT_OF_MEMORY;
+            for (types, 0..) |t, i| {
+                freshTypes[i] = try self.freshenType(t, cache);
+            }
+            return self.makeFreshTypeSpecific(.{ .Tuple = freshTypes }) catch return TypeError.OUT_OF_MEMORY;
+        },
+        .Environment => |env| {
+            const freshEnv = try TypeEnv.init(self.allocator, env.parent);
+            var it = env.bindings.iterator();
+            while (it.next()) |entry| {
+                const freshVal = try self.freshenType(entry.value_ptr.*, cache);
+                try freshEnv.add(entry.key_ptr.*, freshVal);
+            }
+            return self.makeFreshTypeSpecific(.{ .Environment = freshEnv }) catch return TypeError.OUT_OF_MEMORY;
+        },
+        else => return resolved,
+    }
+}
+
+fn unifyTypes(self: *TypeChecker, rawLeft: *Type, rawRight: *Type) TypeError!void {
     const left = self.applySubstitutions(rawLeft);
     const right = self.applySubstitutions(rawRight);
 
@@ -729,10 +806,16 @@ fn unifyTypes(self: *TypeChecker, rawLeft: *Type, rawRight: *Type) !void {
     }
 
     if (left.* == .Wildcard) {
+        if (self.occursInType(left.Wildcard, right)) {
+            return TypeError.CANNOT_UNIFY;
+        }
         self.substitutions.put(left.Wildcard, right) catch return TypeError.OUT_OF_MEMORY;
         return;
     }
     if (right.* == .Wildcard) {
+        if (self.occursInType(right.Wildcard, left)) {
+            return TypeError.CANNOT_UNIFY;
+        }
         self.substitutions.put(right.Wildcard, left) catch return TypeError.OUT_OF_MEMORY;
         return;
     }
