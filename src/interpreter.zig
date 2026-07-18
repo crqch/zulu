@@ -61,6 +61,7 @@ const ValueType = enum {
     String,
     Tuple,
     Closure,
+    Environment,
 };
 
 pub const Value = union(ValueType) {
@@ -74,6 +75,7 @@ pub const Value = union(ValueType) {
         node: *Expression,
         env: *Env,
     },
+    Environment: *Env,
 };
 
 pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
@@ -97,6 +99,30 @@ pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
             return str.items;
         },
         .Closure => try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, value.Closure.node.Lambda.type.?.*)}),
+        .Environment => |env| {
+            var str = std.ArrayList(u8).initCapacity(allocator, 0) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+
+            try str.print(allocator, "env {{\n", .{});
+            var entries = try std.ArrayList(std.StringHashMap(Value).Entry).initCapacity(allocator, 0);
+
+            var current_env: ?*Env = env;
+            while (current_env) |curr| {
+                var iterator = curr.bindings.iterator();
+
+                while (iterator.next()) |entry| {
+                    entries.insert(allocator, 0, entry) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+                }
+                current_env = curr.parent;
+            }
+
+            for (entries.items) |entry| {
+                try str.print(allocator, "\t{s}: {s}\n", .{ entry.key_ptr.*, try printValue(allocator, entry.value_ptr.*) });
+            }
+
+            try str.print(allocator, "}}\n", .{});
+
+            return str.items;
+        },
     };
 }
 
@@ -366,13 +392,33 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
 
             return InterpreterError.MISSING_MATCH_CASE;
         },
+        .CurrentEnvironment => {
+            return Value{
+                .Environment = environment,
+            };
+        },
         .MemberAccess => |memberAccess| {
-            _ = memberAccess;
-            return InterpreterError.UNIMPLEMENTED;
+            const objectValue = try self._eval(memberAccess.object, environment);
+            if (objectValue != .Environment) return InterpreterError.MEMBER_ACCESS_ON_NON_ENVIRONMENT;
+
+            std.log.info("{s}\n", .{memberAccess.member});
+            const memberValue = objectValue.Environment.get(memberAccess.member);
+
+            if (memberValue) |val| return val;
+            return InterpreterError.PROPERTY_NOT_FOUND_ON_OBJECT;
         },
         .Module => |mod| {
-            _ = mod;
-            return InterpreterError.UNIMPLEMENTED;
+            const moduleEnvironment = try Env.init(self.allocator, null);
+
+            const value = try self._eval(mod.block, moduleEnvironment);
+
+            if (value != .Environment) return InterpreterError.EXPECTED_CURRENT_ENVIRONMENT_ON_MODULE_END;
+
+            try environment.add(mod.identifier, Value{
+                .Environment = value.Environment,
+            });
+
+            return self._eval(mod.rest, environment);
         },
     }
 }
@@ -425,6 +471,9 @@ const InterpreterError = error{
     TYPE_PROMOTION_NOT_IMPLEMENTED,
     UNMATCHED_PATTERN,
     MISSING_MATCH_CASE,
+    PROPERTY_NOT_FOUND_ON_OBJECT,
+    MEMBER_ACCESS_ON_NON_ENVIRONMENT,
+    EXPECTED_CURRENT_ENVIRONMENT_ON_MODULE_END,
 
     UNIMPLEMENTED,
 };

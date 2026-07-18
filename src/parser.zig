@@ -106,6 +106,12 @@ fn moduleNud(self: *Parser) ParserError!*Expression {
 
     const moduleExpression = try self.parseExpression(Precedence.none);
 
+    var expr = moduleExpression;
+
+    while (expr.* == .Declaration) expr = expr.Declaration.block;
+
+    expr.* = .CurrentEnvironment;
+
     self.expect(.RCUR) catch return ParserError.EXPECTED_MODULE_END;
 
     const restExpression = self.parseExpression(Precedence.none) catch |err| {

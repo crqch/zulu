@@ -48,6 +48,7 @@ pub const Expression = union(enum) {
     Variable: []const u8,
     Number: []const u8,
     Unit,
+    CurrentEnvironment,
     Boolean: bool,
     String: []const u8,
     Tuple: []*Expression,
@@ -142,6 +143,9 @@ pub const AstPrinter = struct {
             },
             .Unit => {
                 try self.buffer.print(self.allocator, "Unit\n", .{});
+            },
+            .CurrentEnvironment => {
+                try self.buffer.print(self.allocator, "CurrentEnvironment\n", .{});
             },
             .Boolean => |b| {
                 try self.buffer.print(self.allocator, "Boolean( {s} )\n", .{if (b) "True" else "False"});

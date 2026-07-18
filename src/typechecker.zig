@@ -22,6 +22,7 @@ pub const Type = union(enum) {
         returnType: *Type,
     },
     Wildcard: usize,
+    Environment: *TypeEnv,
 };
 
 const TypeEnv = struct {
@@ -71,6 +72,10 @@ pub const TypeError = error{
     CANNOT_UNIFY,
     MISSING_MATCH_CASE,
     UNMATCHED_PATTERN,
+    PROPERTY_NOT_FOUND_ON_OBJECT,
+    MEMBER_ACCESS_ON_NON_ENVIRONMENT,
+    EXPECTED_ENVIRONMENT_TYPE_ON_MODULE_END,
+    SHADOWING_BY_MODULE_NOT_ALLOWED,
     UNIMPLEMENTED,
 };
 
@@ -187,6 +192,30 @@ pub const PrettyPrinter = struct {
                     try buf.print(self.allocator, "{s} -> {s}", .{ try self._prettyPrint(lam.argType.*, 1), try self._prettyPrint(lam.returnType.*, 0) });
                 }
                 return buf.items;
+            },
+            .Environment => |env| {
+                var str = try std.ArrayList(u8).initCapacity(self.allocator, 0);
+
+                try str.print(self.allocator, "env {{\n", .{});
+
+                var entries = try std.ArrayList(std.StringHashMap(*Type).Entry).initCapacity(self.allocator, 0);
+
+                var current_env: ?*TypeEnv = env;
+                while (current_env) |curr| {
+                    var iterator = curr.bindings.iterator();
+
+                    while (iterator.next()) |entry| {
+                        entries.insert(self.allocator, 0, entry) catch return TypeError.OUT_OF_MEMORY;
+                    }
+                    current_env = curr.parent;
+                }
+
+                for (entries.items) |entry| {
+                    try str.print(self.allocator, "\t{s}: {s}\n", .{ entry.key_ptr.*, try self._prettyPrint(entry.value_ptr.*.*, 0) });
+                }
+                try str.print(self.allocator, "}}\n", .{});
+
+                return str.items;
             },
         };
     }
@@ -585,12 +614,35 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
             return firstTp;
         },
         .MemberAccess => |memberAccess| {
-            _ = memberAccess;
-            return TypeError.UNIMPLEMENTED;
+            const objectType = try self._inferType(memberAccess.object, environment);
+
+            if (objectType.* != .Environment) return TypeError.MEMBER_ACCESS_ON_NON_ENVIRONMENT;
+
+            const memberType = objectType.Environment.get(memberAccess.member);
+
+            if (memberType) |memberTp| {
+                return memberTp;
+            }
+
+            return TypeError.PROPERTY_NOT_FOUND_ON_OBJECT;
         },
         .Module => |module| {
-            _ = module;
-            return TypeError.UNIMPLEMENTED;
+            const moduleEnvironment = try TypeEnv.init(self.allocator, null);
+
+            const tp = try self._inferType(module.block, moduleEnvironment);
+
+            if (tp.* != .Environment) return TypeError.EXPECTED_ENVIRONMENT_TYPE_ON_MODULE_END;
+
+            if (environment.get(module.identifier)) |_| {
+                return TypeError.SHADOWING_BY_MODULE_NOT_ALLOWED;
+            }
+
+            try environment.add(module.identifier, try self.makeFreshTypeSpecific(.{ .Environment = tp.Environment }));
+
+            return try self._inferType(module.rest, environment);
+        },
+        .CurrentEnvironment => {
+            return try self.makeFreshTypeSpecific(.{ .Environment = environment });
         },
     }
 }

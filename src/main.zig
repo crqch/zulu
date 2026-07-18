@@ -259,6 +259,15 @@ pub fn pipeline(allocator: std.mem.Allocator, source: []const u8, options: Optio
             error.UNMATCHED_PATTERN => {
                 std.debug.print("Pattern unmatched in match.\n", .{});
             },
+            error.PROPERTY_NOT_FOUND_ON_OBJECT => {
+                std.debug.print("Property not found on object.\n", .{});
+            },
+            error.MEMBER_ACCESS_ON_NON_ENVIRONMENT => {
+                std.debug.print("Member access on non module.\n", .{});
+            },
+            error.EXPECTED_CURRENT_ENVIRONMENT_ON_MODULE_END => {
+                std.debug.print("Expected current environment on module end.\n", .{});
+            },
         }
         if (interpreter.last_expression) |last_expr| {
             if (findExprLocation(tokens, last_expr)) |token| {
@@ -357,6 +366,7 @@ fn findExprLocation(tokens: []const Token, expr: *Expression) ?Token {
         .Application => |app| return findExprLocation(tokens, app.callee),
         .MemberAccess => |memberAccess| return findTokenByLexemePtr(tokens, memberAccess.member),
         .Module => |module| return findTokenByLexemePtr(tokens, module.identifier),
+        .CurrentEnvironment => return null,
     }
 }
 
