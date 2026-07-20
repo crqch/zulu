@@ -129,8 +129,9 @@ fn run(init: std.process.Init) anyerror!void {
         return;
     }
 
-    var sharedContext = SharedContext.init(arena, init.io, options.options) catch {
+    var sharedContext = SharedContext.init(arena, init.io, options.options) catch |err| {
         std.debug.print(ansi.bold ++ ansi.red ++ "Memory allocator error: " ++ ansi.reset ++ ansi.red ++ "Shared context hashmap allocation failed!" ++ ansi.reset, .{});
+        return err;
     };
     defer sharedContext.deinit();
 
