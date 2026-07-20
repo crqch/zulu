@@ -32,6 +32,14 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, options: Options) !SharedC
 }
 
 pub fn deinit(self: *SharedContext) void {
+    var it = self.bindings.iterator();
+    while (it.next()) |entry| {
+        const key = entry.key_ptr.*;
+        if (!std.mem.eql(u8, key, "_")) {
+            self.allocator.free(@constCast(key));
+        }
+    }
+    self.bindings.deinit();
     self.pipeline.deinit();
 }
 
