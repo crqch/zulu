@@ -36,9 +36,14 @@ pub fn deinit(self: *SharedContext) void {
 }
 
 pub fn load(self: *SharedContext, filePath: []const u8) !void {
-    const source = try readFileContents(self.allocator, self.io, filePath);
-
     const absolutePath = try std.Io.Dir.cwd().realPathFileAlloc(self.io, filePath, self.allocator);
+    if (self.bindings.get(absolutePath)) |_| {
+        self.allocator.free(absolutePath);
+        return;
+    }
+
+    const source = try readFileContents(self.allocator, self.io, filePath);
+    defer self.allocator.free(source);
 
     const ret = try self.pipeline.run(self, filePath, source, self.options) orelse return error.Unexpected;
 
