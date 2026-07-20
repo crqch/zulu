@@ -54,6 +54,7 @@ pub fn loadSource(self: *SharedContext, source: []const u8) !void {
     const ret = try self.pipeline.run(self, "_", source, self.options) orelse return error.Unexpected;
 
     const absolutePath = try std.Io.Dir.cwd().realPathFileAlloc(self.io, "_", self.allocator);
+    defer self.allocator.free(absolutePath);
 
     try self.bindings.put(absolutePath, ret);
 }
@@ -62,6 +63,7 @@ pub fn get(self: *SharedContext, filePath: []const u8) !ReturnType {
     const absolutePath = try std.Io.Dir.cwd().realPathFileAlloc(self.io, filePath, self.allocator);
 
     if (self.bindings.get(absolutePath)) |ret| return ret;
+    defer self.allocator.free(absolutePath);
 
-    unreachable;
+    return error.FileNotFound;
 }
