@@ -17,6 +17,7 @@ pub const TokenType = enum {
     MINUS,
     SLASH,
     ASTERISK,
+    AT,
     DOT,
     COMMA,
     NOTEQ,
@@ -39,6 +40,8 @@ pub const TokenType = enum {
     RPAR,
     LBRA,
     RBRA,
+    LCUR,
+    RCUR,
 
     IDENT,
     NUMBER,
@@ -52,6 +55,8 @@ pub const TokenType = enum {
     KW_IF,
     KW_ELSE,
     KW_MATCH,
+    KW_MOD,
+    KW_IMPORT,
 
     EOF,
 };
@@ -67,11 +72,13 @@ pub const LexerError = error{
 const keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "true", .KW_TRUE },
     .{ "false", .KW_FALSE },
+    .{ "and", .KW_AND },
+    .{ "or", .KW_OR },
     .{ "if", .KW_IF },
     .{ "else", .KW_ELSE },
     .{ "match", .KW_MATCH },
-    .{ "and", .KW_AND },
-    .{ "or", .KW_OR },
+    .{ "mod", .KW_MOD },
+    .{ "import", .KW_IMPORT },
 });
 
 pub fn init(allocator: std.mem.Allocator, source: []const u8) !Lexer {
@@ -114,11 +121,30 @@ pub fn printTokens(self: *Lexer) LexerError![]const u8 {
 fn scanToken(self: *Lexer) LexerError!void {
     const char = self.advance();
     switch (char) {
-        '+', '-', '/', '*', '=', '!', '|', '(', ')', '[', ']', ',', ';', '>', '<' => {
+        '+', '-', '/', '*', '@', '=', '!', '|', '(', ')', '[', ']', '{', '}', ',', ';', '>', '<', '.' => {
+            if (char == '.') {
+                if (!self.isAtEnd() and std.ascii.isDigit(self.peek())) {
+                    try self.number(char);
+                    return;
+                } else {
+                    return try self.addToken(.DOT);
+                }
+            }
+
+            if (char == '@') {
+                if (!self.isAtEnd() and isValidIdentChar(self.peek())) {
+                    try self.identifier();
+                    return;
+                } else {
+                    return try self.addToken(.AT);
+                }
+            }
+
             return try self.addToken(switch (char) {
                 '+' => .PLUS,
                 '-' => .MINUS,
                 '*' => .ASTERISK,
+                '@' => .AT,
                 ',' => .COMMA,
                 '|' => .PIPE,
                 '/' => if (self.match('/')) .SLASHSLASH else .SLASH,
@@ -133,6 +159,8 @@ fn scanToken(self: *Lexer) LexerError!void {
                 ')' => .RPAR,
                 '[' => .LBRA,
                 ']' => .RBRA,
+                '{' => .LCUR,
+                '}' => .RCUR,
                 ';' => .SEMICOLON,
                 else => unreachable,
             });

@@ -4,13 +4,17 @@ const Expression = @import("./ast.zig").Expression;
 const MatchPattern = @import("./ast.zig").MatchPattern;
 const Bop = @import("./ast.zig").Bop;
 const TypeChecker = @import("./typechecker.zig");
+const SharedContext = @import("./shared.zig");
+const readFileContents = @import("./root.zig").readFileContents;
 
 allocator: std.mem.Allocator,
+sharedContext: *SharedContext,
 last_expression: ?*Expression = null,
 
-pub fn init(allocator: std.mem.Allocator) Interpreter {
+pub fn init(allocator: std.mem.Allocator, sharedContext: *SharedContext) Interpreter {
     return Interpreter{
         .allocator = allocator,
+        .sharedContext = sharedContext,
         .last_expression = null,
     };
 }
@@ -51,31 +55,49 @@ const Env = struct {
 
         return null;
     }
+
+    fn expand(self: *Env, env: *Env) !void {
+        if (self.parent) |parent_env| {
+            return try parent_env.expand(env);
+        }
+
+        self.parent = env;
+    }
 };
 
 const ValueType = enum {
-    Integer,
-    Float,
+    Unit,
     Boolean,
+    Float,
+    Integer,
     String,
-    Tuple,
+
     Closure,
+
+    Tuple,
+    Environment,
 };
 
 pub const Value = union(ValueType) {
-    Integer: i64,
-    Float: f64,
+    Unit,
+
     Boolean: bool,
+    Float: f64,
+    Integer: i64,
     String: []const u8,
-    Tuple: []Value,
+
     Closure: struct {
         node: *Expression,
         env: *Env,
     },
+
+    Tuple: []Value,
+    Environment: *Env,
 };
 
 pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
     return switch (value) {
+        .Unit => "unit",
         .Boolean => if (value.Boolean) "true" else "false",
         .Float => try std.fmt.allocPrint(allocator, "{d}", .{value.Float}),
         .Integer => try std.fmt.allocPrint(allocator, "{d}", .{value.Integer}),
@@ -94,6 +116,30 @@ pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
             return str.items;
         },
         .Closure => try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, value.Closure.node.Lambda.type.?.*)}),
+        .Environment => |env| {
+            var str = std.ArrayList(u8).initCapacity(allocator, 0) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+
+            try str.print(allocator, "env {{\n", .{});
+            var entries = try std.ArrayList(std.StringHashMap(Value).Entry).initCapacity(allocator, 0);
+
+            var current_env: ?*Env = env;
+            while (current_env) |curr| {
+                var iterator = curr.bindings.iterator();
+
+                while (iterator.next()) |entry| {
+                    entries.insert(allocator, 0, entry) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+                }
+                current_env = curr.parent;
+            }
+
+            for (entries.items) |entry| {
+                try str.print(allocator, "\t{s}: {s}\n", .{ entry.key_ptr.*, try printValue(allocator, entry.value_ptr.*) });
+            }
+
+            try str.print(allocator, "}}\n", .{});
+
+            return str.items;
+        },
     };
 }
 
@@ -106,6 +152,9 @@ pub fn eval(self: *Interpreter, expression: *Expression) !Value {
 fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) InterpreterError!Value {
     self.last_expression = expression;
     switch (expression.*) {
+        .Unit => {
+            return Value{ .Unit = {} };
+        },
         .Number => |num| {
             const periodIndex = std.mem.find(u8, num, ".");
 
@@ -127,6 +176,13 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 return InterpreterError.INT_PARSING_FAILED;
             };
             return Value{ .Integer = int };
+        },
+        .Import => |filePath| {
+            const ret = self.sharedContext.get(filePath) catch {
+                return InterpreterError.IMPORT_FILE_NOT_FOUND;
+            };
+
+            return ret.value orelse return InterpreterError.IMPORT_FILE_NOT_FOUND;
         },
         .String => |str| {
             return Value{
@@ -360,6 +416,45 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
 
             return InterpreterError.MISSING_MATCH_CASE;
         },
+        .CurrentEnvironment => {
+            return Value{
+                .Environment = environment,
+            };
+        },
+        .UseEnvironment => |env| {
+            const evaluatedEnv = try self._eval(env.environment, environment);
+            if (evaluatedEnv != .Environment) return InterpreterError.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION;
+            
+            var temp_env = try Env.init(self.allocator, environment);
+            var it = evaluatedEnv.Environment.bindings.iterator();
+            while (it.next()) |entry| {
+                try temp_env.add(entry.key_ptr.*, entry.value_ptr.*);
+            }
+            
+            return try self._eval(env.block, temp_env);
+        },
+        .MemberAccess => |memberAccess| {
+            const objectValue = try self._eval(memberAccess.object, environment);
+            if (objectValue != .Environment) return InterpreterError.MEMBER_ACCESS_ON_NON_ENVIRONMENT;
+
+            const memberValue = objectValue.Environment.get(memberAccess.member);
+
+            if (memberValue) |val| return val;
+            return InterpreterError.PROPERTY_NOT_FOUND_ON_OBJECT;
+        },
+        .Module => |mod| {
+            const moduleEnvironment = try Env.init(self.allocator, null);
+
+            const value = try self._eval(mod.block, moduleEnvironment);
+
+            if (value != .Environment) return InterpreterError.EXPECTED_CURRENT_ENVIRONMENT_ON_MODULE_END;
+
+            try environment.add(mod.identifier, Value{
+                .Environment = value.Environment,
+            });
+
+            return self._eval(mod.rest, environment);
+        },
     }
 }
 
@@ -401,16 +496,28 @@ fn matchesPattern(self: *Interpreter, pattern: MatchPattern, value: Value) Inter
 
 const InterpreterError = error{
     UNEXPECTED_TYPE,
+    TYPE_PROMOTION_NOT_IMPLEMENTED,
+
     FLOAT_PARSING_FAILED,
     INT_PARSING_FAILED,
+
     MEMORY_ALLOCATION_FAILED,
+
     DIVISION_BY_ZERO,
+
     UNBOUND_VARIABLE,
     ENVIRONMENT_MAP_ERROR,
     ENVIRONMENT_INITALIZATION_ERROR,
-    TYPE_PROMOTION_NOT_IMPLEMENTED,
+
     UNMATCHED_PATTERN,
     MISSING_MATCH_CASE,
+
+    PROPERTY_NOT_FOUND_ON_OBJECT,
+    MEMBER_ACCESS_ON_NON_ENVIRONMENT,
+    EXPECTED_CURRENT_ENVIRONMENT_ON_MODULE_END,
+    EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION,
+
+    IMPORT_FILE_NOT_FOUND,
 
     UNIMPLEMENTED,
 };

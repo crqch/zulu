@@ -21,11 +21,11 @@ pub const Bop = enum {
 };
 
 pub const MatchPattern = union(enum) {
-    Identifier: []const u8,
     Cons: struct {
         head: *MatchPattern,
         rest: *MatchPattern,
     },
+    Identifier: []const u8,
     Tuple: struct {
         binds: []*MatchPattern,
     },
@@ -38,6 +38,14 @@ pub const MatchCase = struct {
 };
 
 pub const Expression = union(enum) {
+    Boolean: bool,
+    Import: []const u8,
+    Number: []const u8,
+    String: []const u8,
+    Tuple: []*Expression,
+    Unit,
+    Variable: []const u8,
+
     BinaryOperation: struct {
         operation: Bop,
         left: *Expression,
@@ -45,33 +53,45 @@ pub const Expression = union(enum) {
     },
     Not: *Expression,
     UnaryMinus: *Expression,
-    Variable: []const u8,
-    Number: []const u8,
-    Boolean: bool,
-    String: []const u8,
-    Tuple: []*Expression,
-    Declaration: struct {
-        identifier: []const u8,
+
+    Condition: struct {
         expression: *Expression,
-        block: *Expression,
+        satisfyBlock: *Expression,
+        elseBlock: *Expression,
+    },
+    Match: struct {
+        scrutinee: *Expression,
+        cases: []MatchCase,
+    },
+
+    Application: struct {
+        callee: *Expression,
+        value: *Expression,
     },
     Lambda: struct {
         identifier: []const u8,
         block: *Expression,
         type: ?*Type,
     },
-    Match: struct {
-        scrutinee: *Expression,
-        cases: []MatchCase,
+
+    CurrentEnvironment,
+    UseEnvironment: struct {
+        environment: *Expression,
+        block: *Expression,
     },
-    Application: struct {
-        callee: *Expression,
-        value: *Expression,
-    },
-    Condition: struct {
+    Declaration: struct {
+        identifier: []const u8,
         expression: *Expression,
-        satisfyBlock: *Expression,
-        elseBlock: *Expression,
+        block: *Expression,
+    },
+    MemberAccess: struct {
+        object: *Expression,
+        member: []const u8,
+    },
+    Module: struct {
+        identifier: []const u8,
+        block: *Expression,
+        rest: *Expression,
     },
 };
 
@@ -116,6 +136,12 @@ pub const AstPrinter = struct {
 
                 try self.printNode(dec.block.*, level + 1);
             },
+            .Module => |mod| {
+                try self.buffer.print(self.allocator, "Module ( {s} )\n", .{mod.identifier});
+
+                try self.printNode(mod.block.*, level + 1);
+                try self.printNode(mod.rest.*, level + 1);
+            },
             .String => |str| {
                 try self.buffer.print(self.allocator, "String\n", .{});
                 try self.buffer.appendNTimes(self.allocator, ' ', level + 1);
@@ -123,6 +149,20 @@ pub const AstPrinter = struct {
             },
             .Number => |num| {
                 try self.buffer.print(self.allocator, "Number( {s} )\n", .{num});
+            },
+            .Import => |name| {
+                try self.buffer.print(self.allocator, "Import( {s} )\n", .{name});
+            },
+            .Unit => {
+                try self.buffer.print(self.allocator, "Unit\n", .{});
+            },
+            .CurrentEnvironment => {
+                try self.buffer.print(self.allocator, "CurrentEnvironment\n", .{});
+            },
+            .UseEnvironment => |env| {
+                try self.buffer.print(self.allocator, "UseEnvironment\n", .{});
+                try self.printNode(env.environment.*, level + 1);
+                try self.printNode(env.block.*, level + 1);
             },
             .Boolean => |b| {
                 try self.buffer.print(self.allocator, "Boolean( {s} )\n", .{if (b) "True" else "False"});
@@ -171,6 +211,11 @@ pub const AstPrinter = struct {
                 try self.buffer.print(self.allocator, "UnaryMinus\n", .{});
 
                 try self.printNode(opposite.*, level + 1);
+            },
+            .MemberAccess => |memberAccess| {
+                try self.buffer.print(self.allocator, "MemberAccess ( {s} )\n", .{memberAccess.member});
+
+                try self.printNode(memberAccess.object.*, level + 1);
             },
         }
     }

@@ -1,26 +1,33 @@
 const std = @import("std");
 
-const TypeChecker = @This();
 const Expression = @import("./ast.zig").Expression;
 const MatchPattern = @import("./ast.zig").MatchPattern;
+const SharedContext = @import("./shared.zig");
 
+const TypeChecker = @This();
 allocator: std.mem.Allocator,
 errorContext: ?TypeErrorContext,
+sharedContext: ?*SharedContext,
 
 nextWildcardId: usize,
 substitutions: std.AutoHashMap(usize, *Type),
 
 pub const Type = union(enum) {
-    Int,
-    Float,
+    Wildcard: usize,
+
+    Unit,
     Boolean,
+    Float,
+    Int,
     String,
-    Tuple: []*Type,
+
     Lambda: struct {
         argType: *Type,
         returnType: *Type,
     },
-    Wildcard: usize,
+
+    Environment: *TypeEnv,
+    Tuple: []*Type,
 };
 
 const TypeEnv = struct {
@@ -59,18 +66,37 @@ const TypeEnv = struct {
 
         return null;
     }
+
+    fn expand(self: *TypeEnv, env: *TypeEnv) !void {
+        if (self.parent) |parent_env| {
+            return try parent_env.expand(env);
+        }
+
+        self.parent = env;
+    }
 };
 
 pub const TypeError = error{
-    UNBOUND_VARIABLE,
+    OUT_OF_MEMORY,
     ENVIRONMENT_INITALIZATION_ERROR,
     ENVIRONMENT_MAP_ERROR,
+
+    UNBOUND_VARIABLE,
+
     UNEXPECTED_TYPE,
-    OUT_OF_MEMORY,
     CANNOT_UNIFY,
+
     MISSING_MATCH_CASE,
     UNMATCHED_PATTERN,
+
+    PROPERTY_NOT_FOUND_ON_OBJECT,
+    MEMBER_ACCESS_ON_NON_ENVIRONMENT,
+    EXPECTED_ENVIRONMENT_TYPE_ON_MODULE_END,
+    SHADOWING_BY_MODULE_NOT_ALLOWED,
+    EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION,
+
     UNIMPLEMENTED,
+    IMPORT_FILE_NOT_FOUND,
 };
 
 const TypeErrorContext = union(enum) {
@@ -84,10 +110,11 @@ const TypeErrorContext = union(enum) {
     },
 };
 
-pub fn init(allocator: std.mem.Allocator) TypeChecker {
+pub fn init(allocator: std.mem.Allocator, sharedContext: ?*SharedContext) TypeChecker {
     return TypeChecker{
         .allocator = allocator,
         .errorContext = null,
+        .sharedContext = sharedContext,
 
         .nextWildcardId = 0,
         .substitutions = std.AutoHashMap(usize, *Type).init(allocator),
@@ -107,6 +134,17 @@ pub fn finalizeType(self: *TypeChecker, tp: *Type) *Type {
         .Lambda => {
             resolved.Lambda.argType = self.finalizeType(resolved.Lambda.argType);
             resolved.Lambda.returnType = self.finalizeType(resolved.Lambda.returnType);
+        },
+        .Environment => |env| {
+            var it = env.bindings.iterator();
+            while (it.next()) |entry| {
+                entry.value_ptr.* = self.finalizeType(entry.value_ptr.*);
+            }
+        },
+        .Tuple => |types| {
+            for (types, 0..) |t, i| {
+                types[i] = self.finalizeType(t);
+            }
         },
         else => {},
     }
@@ -149,6 +187,7 @@ pub const PrettyPrinter = struct {
 
     fn _prettyPrint(self: *PrettyPrinter, tp: Type, level: u8) ![]const u8 {
         return switch (tp) {
+            .Unit => "unit",
             .Boolean => "bool",
             .Float => "float",
             .Int => "int",
@@ -186,6 +225,30 @@ pub const PrettyPrinter = struct {
                 }
                 return buf.items;
             },
+            .Environment => |env| {
+                var str = try std.ArrayList(u8).initCapacity(self.allocator, 0);
+
+                try str.print(self.allocator, "env {{\n", .{});
+
+                var entries = try std.ArrayList(std.StringHashMap(*Type).Entry).initCapacity(self.allocator, 0);
+
+                var current_env: ?*TypeEnv = env;
+                while (current_env) |curr| {
+                    var iterator = curr.bindings.iterator();
+
+                    while (iterator.next()) |entry| {
+                        entries.insert(self.allocator, 0, entry) catch return TypeError.OUT_OF_MEMORY;
+                    }
+                    current_env = curr.parent;
+                }
+
+                for (entries.items) |entry| {
+                    try str.print(self.allocator, "\t{s}: {s}\n", .{ entry.key_ptr.*, try self._prettyPrint(entry.value_ptr.*.*, 0) });
+                }
+                try str.print(self.allocator, "}}\n", .{});
+
+                return str.items;
+            },
         };
     }
 };
@@ -207,6 +270,9 @@ fn makeFreshTypeSpecific(self: *TypeChecker, tp: Type) !*Type {
 
 fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv) TypeError!*Type {
     switch (expression.*) {
+        .Unit => {
+            return try self.makeFreshTypeSpecific(.Unit);
+        },
         .Number => {
             const freshType = try self.makeFreshType();
             if (std.mem.containsAtLeast(u8, expression.Number, 1, ".")) {
@@ -216,6 +282,16 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
             }
 
             return freshType;
+        },
+        .Import => |filePath| {
+            if (self.sharedContext) |sc| {
+                const ret = sc.get(filePath) catch {
+                    return TypeError.IMPORT_FILE_NOT_FOUND;
+                };
+                return ret.type orelse return TypeError.IMPORT_FILE_NOT_FOUND;
+            } else {
+                return TypeError.ENVIRONMENT_INITALIZATION_ERROR;
+            }
         },
         .Boolean => return {
             const freshType = try self.makeFreshType();
@@ -579,6 +655,55 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *TypeEnv
 
             return firstTp;
         },
+        .MemberAccess => |memberAccess| {
+            const objectType = self.applySubstitutions(try self._inferType(memberAccess.object, environment));
+
+            if (objectType.* != .Environment) return TypeError.MEMBER_ACCESS_ON_NON_ENVIRONMENT;
+
+            const memberType = objectType.Environment.get(memberAccess.member);
+
+            if (memberType) |memberTp| {
+                var cache = std.AutoHashMap(usize, *Type).init(self.allocator);
+                defer cache.deinit();
+                return try self.freshenType(memberTp, &cache);
+            }
+
+            return TypeError.PROPERTY_NOT_FOUND_ON_OBJECT;
+        },
+        .Module => |module| {
+            const moduleEnvironment = try TypeEnv.init(self.allocator, null);
+
+            const tp = try self._inferType(module.block, moduleEnvironment);
+
+            if (tp.* != .Environment) return TypeError.EXPECTED_ENVIRONMENT_TYPE_ON_MODULE_END;
+
+            if (environment.get(module.identifier)) |_| {
+                return TypeError.SHADOWING_BY_MODULE_NOT_ALLOWED;
+            }
+
+            try environment.add(module.identifier, try self.makeFreshTypeSpecific(.{ .Environment = tp.Environment }));
+
+            return try self._inferType(module.rest, environment);
+        },
+        .CurrentEnvironment => {
+            return try self.makeFreshTypeSpecific(.{ .Environment = environment });
+        },
+        .UseEnvironment => |env| {
+            const typeEnv = try self._inferType(env.environment, environment);
+            if (typeEnv.* != .Environment) return TypeError.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION;
+            
+            var temp_env = try TypeEnv.init(self.allocator, environment);
+            var cache = std.AutoHashMap(usize, *Type).init(self.allocator);
+            defer cache.deinit();
+
+            var it = typeEnv.Environment.bindings.iterator();
+            while (it.next()) |entry| {
+                const freshVal = try self.freshenType(entry.value_ptr.*, &cache);
+                try temp_env.add(entry.key_ptr.*, freshVal);
+            }
+            
+            return try self._inferType(env.block, temp_env);
+        },
     }
 }
 
@@ -612,7 +737,67 @@ fn applySubstitutions(self: *TypeChecker, tp: *Type) *Type {
     return tp;
 }
 
-fn unifyTypes(self: *TypeChecker, rawLeft: *Type, rawRight: *Type) !void {
+fn occursInType(self: *TypeChecker, wildcardId: usize, tp: *Type) bool {
+    const resolved = self.applySubstitutions(tp);
+    switch (resolved.*) {
+        .Wildcard => |id| return id == wildcardId,
+        .Lambda => |lam| {
+            return self.occursInType(wildcardId, lam.argType) or self.occursInType(wildcardId, lam.returnType);
+        },
+        .Tuple => |types| {
+            for (types) |t| {
+                if (self.occursInType(wildcardId, t)) return true;
+            }
+            return false;
+        },
+        .Environment => |env| {
+            var it = env.bindings.iterator();
+            while (it.next()) |entry| {
+                if (self.occursInType(wildcardId, entry.value_ptr.*)) return true;
+            }
+            return false;
+        },
+        else => return false,
+    }
+}
+
+fn freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Type)) TypeError!*Type {
+    const resolved = self.applySubstitutions(tp);
+    switch (resolved.*) {
+        .Wildcard => |id| {
+            if (cache.get(id)) |fresh| {
+                return fresh;
+            }
+            const fresh = self.freshWildcard() catch return TypeError.OUT_OF_MEMORY;
+            cache.put(id, fresh) catch return TypeError.OUT_OF_MEMORY;
+            return fresh;
+        },
+        .Lambda => |lam| {
+            const freshArg = try self.freshenType(lam.argType, cache);
+            const freshRet = try self.freshenType(lam.returnType, cache);
+            return self.makeFreshTypeSpecific(.{ .Lambda = .{ .argType = freshArg, .returnType = freshRet } }) catch return TypeError.OUT_OF_MEMORY;
+        },
+        .Tuple => |types| {
+            const freshTypes = self.allocator.alloc(*Type, types.len) catch return TypeError.OUT_OF_MEMORY;
+            for (types, 0..) |t, i| {
+                freshTypes[i] = try self.freshenType(t, cache);
+            }
+            return self.makeFreshTypeSpecific(.{ .Tuple = freshTypes }) catch return TypeError.OUT_OF_MEMORY;
+        },
+        .Environment => |env| {
+            const freshEnv = try TypeEnv.init(self.allocator, env.parent);
+            var it = env.bindings.iterator();
+            while (it.next()) |entry| {
+                const freshVal = try self.freshenType(entry.value_ptr.*, cache);
+                try freshEnv.add(entry.key_ptr.*, freshVal);
+            }
+            return self.makeFreshTypeSpecific(.{ .Environment = freshEnv }) catch return TypeError.OUT_OF_MEMORY;
+        },
+        else => return resolved,
+    }
+}
+
+fn unifyTypes(self: *TypeChecker, rawLeft: *Type, rawRight: *Type) TypeError!void {
     const left = self.applySubstitutions(rawLeft);
     const right = self.applySubstitutions(rawRight);
 
@@ -621,10 +806,16 @@ fn unifyTypes(self: *TypeChecker, rawLeft: *Type, rawRight: *Type) !void {
     }
 
     if (left.* == .Wildcard) {
+        if (self.occursInType(left.Wildcard, right)) {
+            return TypeError.CANNOT_UNIFY;
+        }
         self.substitutions.put(left.Wildcard, right) catch return TypeError.OUT_OF_MEMORY;
         return;
     }
     if (right.* == .Wildcard) {
+        if (self.occursInType(right.Wildcard, left)) {
+            return TypeError.CANNOT_UNIFY;
+        }
         self.substitutions.put(right.Wildcard, left) catch return TypeError.OUT_OF_MEMORY;
         return;
     }
