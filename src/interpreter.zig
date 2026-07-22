@@ -115,7 +115,7 @@ pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
 
             return str.items;
         },
-        .Closure => try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, value.Closure.node.Lambda.type.?.*)}),
+        .Closure => try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, value.Closure.node.Lambda.inferredType.?.*)}),
         .Environment => |env| {
             var str = std.ArrayList(u8).initCapacity(allocator, 0) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
 
@@ -424,13 +424,13 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
         .UseEnvironment => |env| {
             const evaluatedEnv = try self._eval(env.environment, environment);
             if (evaluatedEnv != .Environment) return InterpreterError.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION;
-            
+
             var temp_env = try Env.init(self.allocator, environment);
             var it = evaluatedEnv.Environment.bindings.iterator();
             while (it.next()) |entry| {
                 try temp_env.add(entry.key_ptr.*, entry.value_ptr.*);
             }
-            
+
             return try self._eval(env.block, temp_env);
         },
         .MemberAccess => |memberAccess| {
@@ -454,6 +454,9 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             });
 
             return self._eval(mod.rest, environment);
+        },
+        .TypeAscription => |typeAscription| {
+            return self._eval(typeAscription.expression, environment);
         },
     }
 }

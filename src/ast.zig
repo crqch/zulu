@@ -1,5 +1,7 @@
 const std = @import("std");
+
 const Type = @import("./typechecker.zig").Type;
+const TypePrinter = @import("./typechecker.zig").PrettyPrinter;
 
 pub const Bop = enum {
     ADD,
@@ -61,6 +63,7 @@ pub const Expression = union(enum) {
     },
     Match: struct {
         scrutinee: *Expression,
+        explicitScrutineeType: ?*TypeAst,
         cases: []MatchCase,
     },
 
@@ -71,7 +74,8 @@ pub const Expression = union(enum) {
     Lambda: struct {
         identifier: []const u8,
         block: *Expression,
-        type: ?*Type,
+        inferredType: ?*Type,
+        explicitArgumentType: ?*TypeAst,
     },
 
     CurrentEnvironment,
@@ -81,6 +85,7 @@ pub const Expression = union(enum) {
     },
     Declaration: struct {
         identifier: []const u8,
+        explicitType: ?*TypeAst,
         expression: *Expression,
         block: *Expression,
     },
@@ -92,6 +97,21 @@ pub const Expression = union(enum) {
         identifier: []const u8,
         block: *Expression,
         rest: *Expression,
+    },
+
+    TypeAscription: struct {
+        expression: *Expression,
+        explicitType: *TypeAst,
+    },
+};
+
+pub const TypeAst = union(enum) {
+    Wildcard,
+    Identifier: []const u8,
+    Tuple: []*TypeAst,
+    Function: struct {
+        argument: *TypeAst,
+        returnType: *TypeAst,
     },
 };
 
@@ -114,6 +134,38 @@ pub const AstPrinter = struct {
         return astPrinter.buffer.items;
     }
 
+    fn printType(self: *AstPrinter, typeAst: TypeAst, level: u8) ![]const u8 {
+        return switch (typeAst) {
+            .Wildcard => "_",
+            .Identifier => |ident| ident,
+            .Tuple => |tup| {
+                var buffer = try std.ArrayList(u8).initCapacity(self.allocator, 0);
+                if (level > 15) try buffer.print(self.allocator, "(", .{});
+
+                try buffer.print(self.allocator, "{s}", .{try self.printType(tup[0].*, 16)});
+                if (tup.len > 1)
+                    for (tup[1..]) |t| {
+                        try buffer.print(self.allocator, " * {s}", .{try self.printType(t.*, 16)});
+                    };
+
+                if (level > 15) try buffer.print(self.allocator, ")", .{});
+
+                return buffer.items;
+            },
+            .Function => |fun| {
+                var buffer = try std.ArrayList(u8).initCapacity(self.allocator, 0);
+
+                if (level > 10) {
+                    try buffer.print(self.allocator, "({s} => {s})", .{ try self.printType(fun.argument.*, 0), try self.printType(fun.returnType.*, level) });
+                } else {
+                    try buffer.print(self.allocator, "{s} => {s}", .{ try self.printType(fun.argument.*, 0), try self.printType(fun.returnType.*, level) });
+                }
+
+                return buffer.items;
+            },
+        };
+    }
+
     fn printNode(self: *AstPrinter, expr: Expression, level: usize) !void {
         try self.buffer.appendNTimes(self.allocator, ' ', level);
         try self.buffer.print(self.allocator, "", .{});
@@ -125,12 +177,20 @@ pub const AstPrinter = struct {
                 try self.printNode(app.value.*, level + 1);
             },
             .Lambda => |lam| {
-                try self.buffer.print(self.allocator, "Lambda ( {s} )\n", .{lam.identifier});
+                if (lam.explicitArgumentType) |argumentType| {
+                    try self.buffer.print(self.allocator, "Lambda ( {s} : {s} )\n", .{ lam.identifier, try self.printType(argumentType.*, 0) });
+                } else {
+                    try self.buffer.print(self.allocator, "Lambda ( {s} )\n", .{lam.identifier});
+                }
 
                 try self.printNode(lam.block.*, level + 1);
             },
             .Declaration => |dec| {
-                try self.buffer.print(self.allocator, "Declaration ( {s} )\n", .{dec.identifier});
+                if (dec.explicitType) |explicitType| {
+                    try self.buffer.print(self.allocator, "Declaration ( {s} : {s} )\n", .{ dec.identifier, try self.printType(explicitType.*, 0) });
+                } else {
+                    try self.buffer.print(self.allocator, "Declaration ( {s} )\n", .{dec.identifier});
+                }
 
                 try self.printNode(dec.expression.*, level + 1);
 
@@ -195,6 +255,11 @@ pub const AstPrinter = struct {
 
                 try self.printNode(match.scrutinee.*, level + 1);
 
+                if (match.explicitScrutineeType) |scrutineeType| {
+                    try self.buffer.appendNTimes(self.allocator, ' ', level);
+                    try self.buffer.print(self.allocator, "of type {s}", .{try self.printType(scrutineeType.*, 0)});
+                }
+
                 for (match.cases) |case| {
                     try self.buffer.appendNTimes(self.allocator, ' ', level + 1);
                     try self.buffer.print(self.allocator, "Case\n", .{});
@@ -216,6 +281,10 @@ pub const AstPrinter = struct {
                 try self.buffer.print(self.allocator, "MemberAccess ( {s} )\n", .{memberAccess.member});
 
                 try self.printNode(memberAccess.object.*, level + 1);
+            },
+            .TypeAscription => |typeAscription| {
+                try self.buffer.print(self.allocator, "TypeAscription ( {s} )\n", .{try self.printType(typeAscription.explicitType.*, 0)});
+                try self.printNode(typeAscription.expression.*, level + 1);
             },
         }
     }

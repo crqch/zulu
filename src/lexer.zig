@@ -27,6 +27,7 @@ pub const TokenType = enum {
     BANG,
     PIPE,
     SEMICOLON,
+    COLON,
 
     GTEQ,
     LTEQ,
@@ -123,7 +124,27 @@ pub fn printTokens(self: *Lexer) LexerError![]const u8 {
 fn scanToken(self: *Lexer) LexerError!void {
     const char = self.advance();
     switch (char) {
-        '+', '-', '/', '*', '@', '=', '!', '|', '(', ')', '[', ']', '{', '}', ',', ';', '>', '<', '.' => {
+        '+',
+        '-',
+        '/',
+        '*',
+        '@',
+        '=',
+        ':',
+        '!',
+        '|',
+        '(',
+        ')',
+        '[',
+        ']',
+        '{',
+        '}',
+        ',',
+        ';',
+        '>',
+        '<',
+        '.',
+        => {
             if (char == '.') {
                 if (!self.isAtEnd() and std.ascii.isDigit(self.peek())) {
                     try self.number(char);
@@ -146,9 +167,9 @@ fn scanToken(self: *Lexer) LexerError!void {
                 '+' => .PLUS,
                 '-' => .MINUS,
                 '*' => .ASTERISK,
-                '@' => .AT,
                 ',' => .COMMA,
                 '|' => .PIPE,
+                ':' => .COLON,
                 '/' => if (self.match('/')) .SLASHSLASH else .SLASH,
                 '>' => if (self.match('=')) .GTEQ else .GT,
                 '<' => if (self.match('=')) .LTEQ else .LT,
@@ -264,7 +285,7 @@ fn skip(self: *Lexer) void {
 }
 
 fn isValidIdentChar(char: u8) bool {
-    return (std.ascii.isAlphabetic(char) or char == '@' or char == '#' or char == '_');
+    return (std.ascii.isAlphabetic(char) or char == '@' or char == '#' or char == '\'' or char == '_');
 }
 
 fn lowerOfString(allocator: std.mem.Allocator, str: []const u8) LexerError![]u8 {

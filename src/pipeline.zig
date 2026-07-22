@@ -262,6 +262,7 @@ fn findExprLocation(tokens: []const Token, expr: *Expression) ?Token {
         .Module => |module| return findTokenByLexemePtr(tokens, module.identifier),
         .CurrentEnvironment => return null,
         .UseEnvironment => |env| return findExprLocation(tokens, env.environment),
+        .TypeAscription => |typeAscription| return findExprLocation(tokens, typeAscription.expression),
     }
 }
 
