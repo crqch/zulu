@@ -57,6 +57,7 @@ pub const TokenType = enum {
     KW_MATCH,
     KW_MOD,
     KW_IMPORT,
+    KW_ENV,
 
     EOF,
 };
@@ -79,6 +80,7 @@ const keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "match", .KW_MATCH },
     .{ "mod", .KW_MOD },
     .{ "import", .KW_IMPORT },
+    .{ "@env", .KW_ENV },
 });
 
 pub fn init(allocator: std.mem.Allocator, source: []const u8) !Lexer {

@@ -100,6 +100,7 @@ fn nud(self: *Parser) ParserError!*Expression {
         .KW_MATCH => self.matchNud(),
         .KW_MOD => self.moduleNud(),
         .KW_IMPORT => self.importNud(),
+        .KW_ENV => self.envNud(),
         else => error.EXPECTED_EXPRESSION,
     };
 }
@@ -234,6 +235,10 @@ fn newMatchPattern(self: *Parser, data: MatchPattern) ParserError!*MatchPattern 
     const matchPattern = self.allocator.create(MatchPattern) catch return ParserError.OUT_OF_MEMORY;
     matchPattern.* = data;
     return matchPattern;
+}
+
+fn envNud(self: *Parser) ParserError!*Expression {
+    return try self.newExpression(.CurrentEnvironment);
 }
 
 fn numberNud(self: *Parser) ParserError!*Expression {
@@ -455,6 +460,7 @@ fn isAtPrimaryStart(self: *Parser) bool {
         tokenType == .LBRA or
         tokenType == .BANG or
         tokenType == .IDENT or
+        tokenType == .KW_ENV or
         tokenType == .KW_MOD;
 }
 
