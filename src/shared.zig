@@ -61,13 +61,15 @@ pub fn load(self: *SharedContext, filePath: []const u8) !void {
 pub fn loadSource(self: *SharedContext, source: []const u8) !void {
     const ret = try self.pipeline.run(self, "_", source, self.options) orelse return error.Unexpected;
 
-    const absolutePath = try std.Io.Dir.cwd().realPathFileAlloc(self.io, "_", self.allocator);
-    defer self.allocator.free(absolutePath);
-
-    try self.bindings.put(absolutePath, ret);
+    try self.bindings.put("_", ret);
 }
 
 pub fn get(self: *SharedContext, filePath: []const u8) !ReturnType {
+    if (std.mem.eql(u8, filePath, "_")) {
+        if (self.bindings.get("_")) |ret| return ret;
+
+        return error.FileNotFound;
+    }
     const absolutePath = try std.Io.Dir.cwd().realPathFileAlloc(self.io, filePath, self.allocator);
 
     if (self.bindings.get(absolutePath)) |ret| return ret;
