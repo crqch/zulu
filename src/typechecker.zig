@@ -678,6 +678,17 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *Scope) 
                 return try self._inferType(decl.block, blockEnvironment);
             }
         },
+        .TypeDeclaration => |decl| {
+            const blockEnvironment = try self.freshEnvironment(environment);
+
+            const identType = try self.freshWildcard();
+
+            try blockEnvironment.addType(decl.identifier, identType);
+            const explicitType = try self.parseTypeAst(decl.typeAst.*, blockEnvironment);
+            try self.unifyTypes(explicitType, identType);
+
+            return try self._inferType(decl.block, blockEnvironment);
+        },
         .Lambda => |lam| {
             const closureEnvironment = try self.freshEnvironment(environment);
             const argumentType = try self.freshWildcard();

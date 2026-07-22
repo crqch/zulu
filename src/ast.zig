@@ -89,6 +89,11 @@ pub const Expression = union(enum) {
         expression: *Expression,
         block: *Expression,
     },
+    TypeDeclaration: struct {
+        identifier: []const u8,
+        typeAst: *TypeAst,
+        block: *Expression,
+    },
     MemberAccess: struct {
         object: *Expression,
         member: []const u8,
@@ -193,6 +198,11 @@ pub const AstPrinter = struct {
                 }
 
                 try self.printNode(dec.expression.*, level + 1);
+
+                try self.printNode(dec.block.*, level + 1);
+            },
+            .TypeDeclaration => |dec| {
+                try self.buffer.print(self.allocator, "TypeDeclaration ( {s} : {s} )\n", .{ dec.identifier, try self.printType(dec.typeAst.*, 0) });
 
                 try self.printNode(dec.block.*, level + 1);
             },

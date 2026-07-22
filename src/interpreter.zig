@@ -252,6 +252,9 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
 
             return try self._eval(declaration.block, blockEnvironment);
         },
+        .TypeDeclaration => |declaration| {
+            return try self._eval(declaration.block, environment);
+        },
         .Application => |application| {
             const evaluatedCallee = try self._eval(application.callee, environment);
             const evaluatedValue = try self._eval(application.value, environment);

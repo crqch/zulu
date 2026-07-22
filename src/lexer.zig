@@ -57,6 +57,7 @@ pub const TokenType = enum {
     KW_ELSE,
     KW_MATCH,
     KW_MOD,
+    KW_TYPE,
     KW_IMPORT,
     KW_ENV,
 
@@ -80,6 +81,7 @@ const keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "else", .KW_ELSE },
     .{ "match", .KW_MATCH },
     .{ "mod", .KW_MOD },
+    .{ "type", .KW_TYPE },
     .{ "import", .KW_IMPORT },
     .{ "@env", .KW_ENV },
 });

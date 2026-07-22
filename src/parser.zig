@@ -102,10 +102,40 @@ fn nud(self: *Parser) ParserError!*Expression {
         .KW_IF => self.ifNud(),
         .KW_MATCH => self.matchNud(),
         .KW_MOD => self.moduleNud(),
+        .KW_TYPE => self.typeNud(),
         .KW_IMPORT => self.importNud(),
         .KW_ENV => self.envNud(),
         else => error.EXPECTED_EXPRESSION,
     };
+}
+
+fn typeNud(self: *Parser) ParserError!*Expression {
+    const identToken = self.tokens[self.current];
+    try self.expect(.IDENT);
+    try self.expect(.EQ);
+    const typeAst = try self.parseType();
+    try self.expect(.SEMICOLON);
+    const index = self.current;
+
+    const block = self.parseExpression(Precedence.none) catch |err| {
+        if (err == ParserError.EXPECTED_EXPRESSION) {
+            self.current = index;
+
+            return self.newExpression(.{ .TypeDeclaration = .{
+                .identifier = identToken.lexeme,
+                .typeAst = typeAst,
+                .block = try self.newExpression(.CurrentEnvironment),
+            } });
+        }
+
+        return err;
+    };
+
+    return self.newExpression(.{ .TypeDeclaration = .{
+        .identifier = identToken.lexeme,
+        .typeAst = typeAst,
+        .block = block,
+    } });
 }
 
 fn importNud(self: *Parser) ParserError!*Expression {
@@ -147,20 +177,26 @@ fn moduleNud(self: *Parser) ParserError!*Expression {
 
     var expr = moduleExpression;
 
-    while (expr.* == .Declaration) expr = expr.Declaration.block;
+    while (expr.* == .Declaration or expr.* == .TypeDeclaration) {
+        if (expr.* == .Declaration) expr = expr.Declaration.block else expr = expr.TypeDeclaration.block;
+    }
 
     expr.* = .CurrentEnvironment;
 
     self.expect(.RCUR) catch return ParserError.EXPECTED_MODULE_END;
+    const index = self.current;
 
     const restExpression = self.parseExpression(Precedence.none) catch |err| {
-        if (err == ParserError.EXPECTED_EXPRESSION) return try self.newExpression(.{
-            .Module = .{
-                .identifier = moduleName,
-                .block = moduleExpression,
-                .rest = try self.newExpression(.{ .Unit = {} }),
-            },
-        });
+        if (err == ParserError.EXPECTED_EXPRESSION) {
+            self.current = index;
+            return try self.newExpression(.{
+                .Module = .{
+                    .identifier = moduleName,
+                    .block = moduleExpression,
+                    .rest = try self.newExpression(.{ .Unit = {} }),
+                },
+            });
+        }
         return err;
     };
 
@@ -585,6 +621,7 @@ fn isAtPrimaryStart(self: *Parser) bool {
         tokenType == .LBRA or
         tokenType == .BANG or
         tokenType == .IDENT or
+        tokenType == .KW_TYPE or
         tokenType == .KW_ENV or
         tokenType == .KW_MOD;
 }
