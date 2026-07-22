@@ -271,7 +271,10 @@ fn notNud(self: *Parser) ParserError!*Expression {
 }
 
 fn groupNud(self: *Parser) ParserError!*Expression {
-    const innerExpression = try self.parseExpression(Precedence.none);
+    const innerExpression = self.parseExpression(Precedence.none) catch |err| {
+        if (err == ParserError.EXPECTED_EXPRESSION) return try self.newExpression(.Unit);
+        return err;
+    };
 
     self.expect(.RPAR) catch return ParserError.PARENTHESES_UNMATCHED;
     return innerExpression;
