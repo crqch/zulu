@@ -22,7 +22,7 @@ pub fn init(allocator: std.mem.Allocator, sharedContext: *SharedContext) Interpr
 const Env = struct {
     allocator: std.mem.Allocator,
     parent: ?*Env,
-    bindings: std.StringHashMap(Value),
+    bindings: std.StringHashMap(*Value),
 
     pub fn init(allocator: std.mem.Allocator, parent: ?*Env) !*Env {
         const env = allocator.create(Env) catch {
@@ -32,19 +32,19 @@ const Env = struct {
         env.* = Env{
             .allocator = allocator,
             .parent = parent,
-            .bindings = std.StringHashMap(Value).init(allocator),
+            .bindings = std.StringHashMap(*Value).init(allocator),
         };
 
         return env;
     }
 
-    fn add(self: *Env, identifier: []const u8, value: Value) !void {
+    fn add(self: *Env, identifier: []const u8, value: *Value) !void {
         self.bindings.put(identifier, value) catch {
             return InterpreterError.ENVIRONMENT_MAP_ERROR;
         };
     }
 
-    fn get(self: *Env, identifier: []const u8) ?Value {
+    fn get(self: *Env, identifier: []const u8) ?*Value {
         if (self.bindings.get(identifier)) |val| {
             return val;
         }
@@ -91,12 +91,12 @@ pub const Value = union(ValueType) {
         env: *Env,
     },
 
-    Tuple: []Value,
+    Tuple: []*Value,
     Environment: *Env,
 };
 
-pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
-    return switch (value) {
+pub fn printValue(allocator: std.mem.Allocator, value: *Value) ![]const u8 {
+    return switch (value.*) {
         .Unit => "unit",
         .Boolean => if (value.Boolean) "true" else "false",
         .Float => try std.fmt.allocPrint(allocator, "{d}", .{value.Float}),
@@ -120,7 +120,7 @@ pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
             var str = std.ArrayList(u8).initCapacity(allocator, 0) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
 
             try str.print(allocator, "env {{\n", .{});
-            var entries = try std.ArrayList(std.StringHashMap(Value).Entry).initCapacity(allocator, 0);
+            var entries = try std.ArrayList(std.StringHashMap(*Value).Entry).initCapacity(allocator, 0);
 
             var current_env: ?*Env = env;
             while (current_env) |curr| {
@@ -143,17 +143,17 @@ pub fn printValue(allocator: std.mem.Allocator, value: Value) ![]const u8 {
     };
 }
 
-pub fn eval(self: *Interpreter, expression: *Expression) !Value {
+pub fn eval(self: *Interpreter, expression: *Expression) !*Value {
     const env = try Env.init(self.allocator, null);
 
     return try self._eval(expression, env);
 }
 
-fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) InterpreterError!Value {
+fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) InterpreterError!*Value {
     self.last_expression = expression;
     switch (expression.*) {
         .Unit => {
-            return Value{ .Unit = {} };
+            return try self.makeValue(.{ .Unit = {} });
         },
         .Number => |num| {
             const periodIndex = std.mem.find(u8, num, ".");
@@ -168,14 +168,14 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 const float = std.fmt.parseFloat(f64, expression.Number) catch {
                     return InterpreterError.FLOAT_PARSING_FAILED;
                 };
-                return Value{ .Float = float };
+                return try self.makeValue(.{ .Float = float });
             }
 
             // TODO: Add other number bases
             const int = std.fmt.parseInt(i32, num, 10) catch {
                 return InterpreterError.INT_PARSING_FAILED;
             };
-            return Value{ .Integer = int };
+            return try self.makeValue(.{ .Integer = int });
         },
         .Import => |filePath| {
             const ret = self.sharedContext.get(filePath) catch {
@@ -185,14 +185,10 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             return ret.value orelse return InterpreterError.IMPORT_FILE_NOT_FOUND;
         },
         .String => |str| {
-            return Value{
-                .String = str,
-            };
+            return try self.makeValue(.{ .String = str });
         },
         .Boolean => |boolean| {
-            return Value{
-                .Boolean = boolean,
-            };
+            return try self.makeValue(.{ .Boolean = boolean });
         },
         .Variable => |variable| {
             if (environment.get(variable)) |value| {
@@ -201,46 +197,46 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             return InterpreterError.UNBOUND_VARIABLE;
         },
         .Tuple => |expressions| {
-            var values = std.ArrayList(Value).initCapacity(self.allocator, expressions.len) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+            var values = std.ArrayList(*Value).initCapacity(self.allocator, expressions.len) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
 
             for (expressions) |ex| {
                 values.append(self.allocator, try self._eval(ex, environment)) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
             }
 
-            return Value{
+            return try self.makeValue(.{
                 .Tuple = values.items,
-            };
+            });
         },
         .Lambda => {
-            return Value{
+            return try self.makeValue(.{
                 .Closure = .{
                     .node = expression,
                     .env = environment,
                 },
-            };
+            });
         },
         .Not => |not| {
             const notValue = try self._eval(not, environment);
 
-            if (notValue != .Boolean) return InterpreterError.UNEXPECTED_TYPE;
+            if (notValue.* != .Boolean) return InterpreterError.UNEXPECTED_TYPE;
 
-            return Value{
+            return try self.makeValue(.{
                 .Boolean = !notValue.Boolean,
-            };
+            });
         },
         .UnaryMinus => |unaryMinus| {
             const notValue = try self._eval(unaryMinus, environment);
 
-            if (notValue != .Float and notValue != .Integer) return InterpreterError.UNEXPECTED_TYPE;
+            if (notValue.* != .Float and notValue.* != .Integer) return InterpreterError.UNEXPECTED_TYPE;
 
-            if (notValue == .Float) {
-                return Value{
+            if (notValue.* == .Float) {
+                return try self.makeValue(.{
                     .Float = notValue.Float * -1,
-                };
+                });
             } else {
-                return Value{
+                return try self.makeValue(.{
                     .Integer = notValue.Integer * -1,
-                };
+                });
             }
         },
         .Declaration => |declaration| {
@@ -259,7 +255,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             const evaluatedCallee = try self._eval(application.callee, environment);
             const evaluatedValue = try self._eval(application.value, environment);
 
-            if (evaluatedCallee != .Closure) return InterpreterError.UNEXPECTED_TYPE;
+            if (evaluatedCallee.* != .Closure) return InterpreterError.UNEXPECTED_TYPE;
 
             const closure = evaluatedCallee.Closure;
             const closureEnvironment = try Env.init(self.allocator, closure.env);
@@ -271,7 +267,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
         .Condition => |condition| {
             const conditionExpression = try self._eval(condition.expression, environment);
 
-            if (conditionExpression != .Boolean) return InterpreterError.UNEXPECTED_TYPE;
+            if (conditionExpression.* != .Boolean) return InterpreterError.UNEXPECTED_TYPE;
 
             if (conditionExpression.Boolean) {
                 return try self._eval(condition.satisfyBlock, environment);
@@ -280,129 +276,130 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             }
         },
         .BinaryOperation => |bop| {
-            var left = try self._eval(bop.left, environment);
-            var right = try self._eval(bop.right, environment);
+            const left = try self._eval(bop.left, environment);
+            const right = try self._eval(bop.right, environment);
 
             return switch (bop.operation) {
                 Bop.ADD, Bop.SUBTRACT, Bop.DIVIDE, Bop.MULTIPLY => {
                     if (bop.operation == .ADD) {
-                        try assertType(&[_]Value{ left, right }, &[_]ValueType{ .Integer, .Float, .String });
+                        try assertType(&[_]Value{ left.*, right.* }, &[_]ValueType{ .Integer, .Float, .String });
                     } else {
-                        try assertType(&[_]Value{ left, right }, &[_]ValueType{ .Integer, .Float });
+                        try assertType(&[_]Value{ left.*, right.* }, &[_]ValueType{ .Integer, .Float });
                     }
-                    try castType(&left, &right);
+                    try castType(left, right);
 
-                    return switch (left) {
-                        .Integer => Value{ .Integer = try numericOperation(i64, left.Integer, right.Integer, bop.operation) },
-                        .Float => Value{ .Float = try numericOperation(f64, left.Float, right.Float, bop.operation) },
-                        .String => Value{ .String = std.fmt.allocPrint(self.allocator, "{s}{s}", .{ left.String, right.String }) catch return InterpreterError.MEMORY_ALLOCATION_FAILED },
+                    return try self.makeValue(switch (left.*) {
+                        .Integer => .{ .Integer = try numericOperation(i64, left.Integer, right.Integer, bop.operation) },
+                        .Float => .{ .Float = try numericOperation(f64, left.Float, right.Float, bop.operation) },
+                        .String => .{ .String = std.fmt.allocPrint(self.allocator, "{s}{s}", .{ left.String, right.String }) catch return InterpreterError.MEMORY_ALLOCATION_FAILED },
                         else => unreachable,
-                    };
+                    });
                 },
                 Bop.NOTEQ => {
                     expression.*.BinaryOperation.operation = Bop.EQ;
 
                     const negatedValue = try self._eval(expression, environment);
 
-                    return Value{
+                    return try self.makeValue(.{
                         .Boolean = !negatedValue.Boolean,
-                    };
+                    });
                 },
                 Bop.NOTEQEQ => {
                     expression.*.BinaryOperation.operation = Bop.EQEQ;
 
                     const negatedValue = try self._eval(expression, environment);
 
-                    return Value{
+                    return try self.makeValue(.{
                         .Boolean = !negatedValue.Boolean,
-                    };
+                    });
                 },
                 Bop.EQ => {
-                    switch (left) {
+                    switch (left.*) {
                         ValueType.Boolean => {
-                            try assertType(&[_]Value{right}, &[_]ValueType{.Boolean});
-                            return Value{
+                            try assertType(&[_]Value{right.*}, &[_]ValueType{.Boolean});
+                            return try self.makeValue(.{
                                 .Boolean = left.Boolean == right.Boolean,
-                            };
+                            });
                         },
                         ValueType.Float => {
-                            try assertType(&[_]Value{right}, &[_]ValueType{ .Float, .Integer });
-                            try castType(&left, &right);
-                            return Value{
+                            try assertType(&[_]Value{right.*}, &[_]ValueType{ .Float, .Integer });
+                            try castType(left, right);
+                            return try self.makeValue(.{
                                 .Boolean = left.Float == right.Float,
-                            };
+                            });
                         },
                         ValueType.Integer => {
-                            try assertType(&[_]Value{right}, &[_]ValueType{ .Float, .Integer });
-                            try castType(&left, &right);
-                            if (left == .Integer) return Value{
+                            try assertType(&[_]Value{right.*}, &[_]ValueType{ .Float, .Integer });
+                            try castType(left, right);
+                            if (left.* == .Integer) return try self.makeValue(.{
                                 .Boolean = left.Integer == right.Integer,
-                            } else return Value{
+                            });
+                            return try self.makeValue(.{
                                 .Boolean = left.Float == right.Float,
-                            };
+                            });
                         },
                         ValueType.String => {
-                            try assertType(&[_]Value{right}, &[_]ValueType{.String});
+                            try assertType(&[_]Value{right.*}, &[_]ValueType{.String});
                             const eql = std.mem.eql(u8, left.String, right.String);
 
-                            return Value{ .Boolean = eql };
+                            return try self.makeValue(.{ .Boolean = eql });
                         },
                         else => return InterpreterError.UNEXPECTED_TYPE,
                     }
                 },
                 Bop.EQEQ => {
-                    switch (left) {
+                    switch (left.*) {
                         ValueType.Boolean => {
-                            try assertType(&[_]Value{right}, &[_]ValueType{.Boolean});
-                            return Value{
+                            try assertType(&[_]Value{right.*}, &[_]ValueType{.Boolean});
+                            return try self.makeValue(.{
                                 .Boolean = left.Boolean == right.Boolean,
-                            };
+                            });
                         },
                         ValueType.Float => {
-                            try assertType(&[_]Value{right}, &[_]ValueType{ .Integer, .Float });
-                            if (right != .Float) return Value{
+                            try assertType(&[_]Value{right.*}, &[_]ValueType{ .Integer, .Float });
+                            if (right.* != .Float) return try self.makeValue(.{
                                 .Boolean = false,
-                            };
-                            return Value{
+                            });
+                            return try self.makeValue(.{
                                 .Boolean = left.Float == right.Float,
-                            };
+                            });
                         },
                         ValueType.Integer => {
-                            try assertType(&[_]Value{right}, &[_]ValueType{ .Integer, .Float });
-                            if (right != .Integer) return Value{
+                            try assertType(&[_]Value{right.*}, &[_]ValueType{ .Integer, .Float });
+                            if (right.* != .Integer) return try self.makeValue(.{
                                 .Boolean = false,
-                            };
-                            return Value{
+                            });
+                            return try self.makeValue(.{
                                 .Boolean = left.Integer == right.Integer,
-                            };
+                            });
                         },
                         ValueType.String => {
-                            try assertType(&[_]Value{right}, &[_]ValueType{.String});
+                            try assertType(&[_]Value{right.*}, &[_]ValueType{.String});
                             const eql = std.mem.eql(u8, left.String, right.String);
 
-                            return Value{ .Boolean = eql };
+                            return try self.makeValue(.{ .Boolean = eql });
                         },
                         else => return InterpreterError.UNEXPECTED_TYPE,
                     }
                 },
                 Bop.GT, Bop.GTEQ, Bop.LT, Bop.LTEQ => {
-                    try assertType(&[_]Value{ left, right }, &[_]ValueType{ .Integer, .Float });
-                    try castType(&left, &right);
+                    try assertType(&[_]Value{ left.*, right.* }, &[_]ValueType{ .Integer, .Float });
+                    try castType(left, right);
 
-                    return switch (left) {
-                        .Integer => Value{ .Boolean = try numericComparison(i64, left.Integer, right.Integer, bop.operation) },
-                        .Float => Value{ .Boolean = try numericComparison(f64, left.Float, right.Float, bop.operation) },
+                    return try self.makeValue(switch (left.*) {
+                        .Integer => .{ .Boolean = try numericComparison(i64, left.Integer, right.Integer, bop.operation) },
+                        .Float => .{ .Boolean = try numericComparison(f64, left.Float, right.Float, bop.operation) },
                         else => unreachable,
-                    };
+                    });
                 },
                 Bop.AND, Bop.OR => {
-                    try assertType(&[_]Value{ left, right }, &[_]ValueType{.Boolean});
+                    try assertType(&[_]Value{ left.*, right.* }, &[_]ValueType{.Boolean});
 
-                    return switch (bop.operation) {
-                        Bop.AND => Value{ .Boolean = left.Boolean and right.Boolean },
-                        Bop.OR => Value{ .Boolean = left.Boolean or right.Boolean },
+                    return try self.makeValue(switch (bop.operation) {
+                        Bop.AND => .{ .Boolean = left.Boolean and right.Boolean },
+                        Bop.OR => .{ .Boolean = left.Boolean or right.Boolean },
                         else => unreachable,
-                    };
+                    });
                 },
             };
         },
@@ -420,13 +417,13 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             return InterpreterError.MISSING_MATCH_CASE;
         },
         .CurrentEnvironment => {
-            return Value{
+            return try self.makeValue(.{
                 .Environment = environment,
-            };
+            });
         },
         .UseEnvironment => |env| {
             const evaluatedEnv = try self._eval(env.environment, environment);
-            if (evaluatedEnv != .Environment) return InterpreterError.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION;
+            if (evaluatedEnv.* != .Environment) return InterpreterError.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION;
 
             var temp_env = try Env.init(self.allocator, environment);
             var it = evaluatedEnv.Environment.bindings.iterator();
@@ -438,7 +435,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
         },
         .MemberAccess => |memberAccess| {
             const objectValue = try self._eval(memberAccess.object, environment);
-            if (objectValue != .Environment) return InterpreterError.MEMBER_ACCESS_ON_NON_ENVIRONMENT;
+            if (objectValue.* != .Environment) return InterpreterError.MEMBER_ACCESS_ON_NON_ENVIRONMENT;
 
             const memberValue = objectValue.Environment.get(memberAccess.member);
 
@@ -450,11 +447,11 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
 
             const value = try self._eval(mod.block, moduleEnvironment);
 
-            if (value != .Environment) return InterpreterError.EXPECTED_CURRENT_ENVIRONMENT_ON_MODULE_END;
+            if (value.* != .Environment) return InterpreterError.EXPECTED_CURRENT_ENVIRONMENT_ON_MODULE_END;
 
-            try environment.add(mod.identifier, Value{
+            try environment.add(mod.identifier, try self.makeValue(.{
                 .Environment = value.Environment,
-            });
+            }));
 
             return self._eval(mod.rest, environment);
         },
@@ -464,14 +461,22 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
     }
 }
 
-fn expandEnvByPattern(self: *Interpreter, environment: *Env, pattern: MatchPattern, value: Value) InterpreterError!void {
+fn makeValue(self: *Interpreter, value: Value) InterpreterError!*Value {
+    const freshValue = self.allocator.create(Value) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+
+    freshValue.* = value;
+
+    return freshValue;
+}
+
+fn expandEnvByPattern(self: *Interpreter, environment: *Env, pattern: MatchPattern, value: *Value) InterpreterError!void {
     return switch (pattern) {
         .Cons => |cons| {
             _ = cons;
             return InterpreterError.UNIMPLEMENTED;
         },
         .Tuple => |idents| {
-            if (value != .Tuple or value.Tuple.len != idents.binds.len) return InterpreterError.UNMATCHED_PATTERN;
+            if (value.* != .Tuple or value.Tuple.len != idents.binds.len) return InterpreterError.UNMATCHED_PATTERN;
             for (idents.binds, value.Tuple) |pat, val| {
                 try self.expandEnvByPattern(environment, pat.*, val);
             }
@@ -483,14 +488,14 @@ fn expandEnvByPattern(self: *Interpreter, environment: *Env, pattern: MatchPatte
     };
 }
 
-fn matchesPattern(self: *Interpreter, pattern: MatchPattern, value: Value) InterpreterError!bool {
+fn matchesPattern(self: *Interpreter, pattern: MatchPattern, value: *Value) InterpreterError!bool {
     return switch (pattern) {
         .Cons => |cons| {
             _ = cons;
             return InterpreterError.UNIMPLEMENTED;
         },
         .Tuple => |idents| {
-            if (value != .Tuple or value.Tuple.len != idents.binds.len) return false;
+            if (value.* != .Tuple or value.Tuple.len != idents.binds.len) return false;
             for (idents.binds, value.Tuple) |pat, val| {
                 if (!try self.matchesPattern(pat.*, val)) return false;
             }
