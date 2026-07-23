@@ -179,10 +179,13 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
         },
         .Import => |filePath| {
             const ret = self.sharedContext.get(filePath) catch {
-                return InterpreterError.IMPORT_FILE_NOT_FOUND;
+                unreachable;
             };
 
-            return ret.value orelse return InterpreterError.IMPORT_FILE_NOT_FOUND;
+            if (ret.value) |value| {
+                return value;
+            }
+            unreachable;
         },
         .String => |str| {
             return try self.makeValue(.{ .String = str });
@@ -194,7 +197,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             if (environment.get(variable)) |value| {
                 return value;
             }
-            return InterpreterError.UNBOUND_VARIABLE;
+            unreachable;
         },
         .Tuple => |expressions| {
             var values = std.ArrayList(*Value).initCapacity(self.allocator, expressions.len) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
@@ -218,16 +221,12 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
         .Not => |not| {
             const notValue = try self._eval(not, environment);
 
-            if (notValue.* != .Boolean) return InterpreterError.UNEXPECTED_TYPE;
-
             return try self.makeValue(.{
                 .Boolean = !notValue.Boolean,
             });
         },
         .UnaryMinus => |unaryMinus| {
             const notValue = try self._eval(unaryMinus, environment);
-
-            if (notValue.* != .Float and notValue.* != .Integer) return InterpreterError.UNEXPECTED_TYPE;
 
             if (notValue.* == .Float) {
                 return try self.makeValue(.{
@@ -255,8 +254,6 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             const evaluatedCallee = try self._eval(application.callee, environment);
             const evaluatedValue = try self._eval(application.value, environment);
 
-            if (evaluatedCallee.* != .Closure) return InterpreterError.UNEXPECTED_TYPE;
-
             const closure = evaluatedCallee.Closure;
             const closureEnvironment = try Env.init(self.allocator, closure.env);
 
@@ -266,8 +263,6 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
         },
         .Condition => |condition| {
             const conditionExpression = try self._eval(condition.expression, environment);
-
-            if (conditionExpression.* != .Boolean) return InterpreterError.UNEXPECTED_TYPE;
 
             if (conditionExpression.Boolean) {
                 return try self._eval(condition.satisfyBlock, environment);
@@ -281,13 +276,6 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
 
             return switch (bop.operation) {
                 Bop.ADD, Bop.SUBTRACT, Bop.DIVIDE, Bop.MULTIPLY => {
-                    if (bop.operation == .ADD) {
-                        try assertType(&[_]Value{ left.*, right.* }, &[_]ValueType{ .Integer, .Float, .String });
-                    } else {
-                        try assertType(&[_]Value{ left.*, right.* }, &[_]ValueType{ .Integer, .Float });
-                    }
-                    try castType(left, right);
-
                     return try self.makeValue(switch (left.*) {
                         .Integer => .{ .Integer = try numericOperation(i64, left.Integer, right.Integer, bop.operation) },
                         .Float => .{ .Float = try numericOperation(f64, left.Float, right.Float, bop.operation) },
@@ -313,50 +301,16 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                         .Boolean = !negatedValue.Boolean,
                     });
                 },
-                Bop.EQ => {
+                Bop.EQ, // This is a WIP for checking equality over the same type
+                Bop.EQEQ,
+                => {
                     switch (left.*) {
                         ValueType.Boolean => {
-                            try assertType(&[_]Value{right.*}, &[_]ValueType{.Boolean});
                             return try self.makeValue(.{
                                 .Boolean = left.Boolean == right.Boolean,
                             });
                         },
                         ValueType.Float => {
-                            try assertType(&[_]Value{right.*}, &[_]ValueType{ .Float, .Integer });
-                            try castType(left, right);
-                            return try self.makeValue(.{
-                                .Boolean = left.Float == right.Float,
-                            });
-                        },
-                        ValueType.Integer => {
-                            try assertType(&[_]Value{right.*}, &[_]ValueType{ .Float, .Integer });
-                            try castType(left, right);
-                            if (left.* == .Integer) return try self.makeValue(.{
-                                .Boolean = left.Integer == right.Integer,
-                            });
-                            return try self.makeValue(.{
-                                .Boolean = left.Float == right.Float,
-                            });
-                        },
-                        ValueType.String => {
-                            try assertType(&[_]Value{right.*}, &[_]ValueType{.String});
-                            const eql = std.mem.eql(u8, left.String, right.String);
-
-                            return try self.makeValue(.{ .Boolean = eql });
-                        },
-                        else => return InterpreterError.UNEXPECTED_TYPE,
-                    }
-                },
-                Bop.EQEQ => {
-                    switch (left.*) {
-                        ValueType.Boolean => {
-                            try assertType(&[_]Value{right.*}, &[_]ValueType{.Boolean});
-                            return try self.makeValue(.{
-                                .Boolean = left.Boolean == right.Boolean,
-                            });
-                        },
-                        ValueType.Float => {
-                            try assertType(&[_]Value{right.*}, &[_]ValueType{ .Integer, .Float });
                             if (right.* != .Float) return try self.makeValue(.{
                                 .Boolean = false,
                             });
@@ -365,7 +319,6 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                             });
                         },
                         ValueType.Integer => {
-                            try assertType(&[_]Value{right.*}, &[_]ValueType{ .Integer, .Float });
                             if (right.* != .Integer) return try self.makeValue(.{
                                 .Boolean = false,
                             });
@@ -374,18 +327,14 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                             });
                         },
                         ValueType.String => {
-                            try assertType(&[_]Value{right.*}, &[_]ValueType{.String});
                             const eql = std.mem.eql(u8, left.String, right.String);
 
                             return try self.makeValue(.{ .Boolean = eql });
                         },
-                        else => return InterpreterError.UNEXPECTED_TYPE,
+                        else => unreachable,
                     }
                 },
                 Bop.GT, Bop.GTEQ, Bop.LT, Bop.LTEQ => {
-                    try assertType(&[_]Value{ left.*, right.* }, &[_]ValueType{ .Integer, .Float });
-                    try castType(left, right);
-
                     return try self.makeValue(switch (left.*) {
                         .Integer => .{ .Boolean = try numericComparison(i64, left.Integer, right.Integer, bop.operation) },
                         .Float => .{ .Boolean = try numericComparison(f64, left.Float, right.Float, bop.operation) },
@@ -393,8 +342,6 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                     });
                 },
                 Bop.AND, Bop.OR => {
-                    try assertType(&[_]Value{ left.*, right.* }, &[_]ValueType{.Boolean});
-
                     return try self.makeValue(switch (bop.operation) {
                         Bop.AND => .{ .Boolean = left.Boolean and right.Boolean },
                         Bop.OR => .{ .Boolean = left.Boolean or right.Boolean },
@@ -414,7 +361,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 }
             }
 
-            return InterpreterError.MISSING_MATCH_CASE;
+            unreachable;
         },
         .CurrentEnvironment => {
             return try self.makeValue(.{
@@ -423,7 +370,6 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
         },
         .UseEnvironment => |env| {
             const evaluatedEnv = try self._eval(env.environment, environment);
-            if (evaluatedEnv.* != .Environment) return InterpreterError.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION;
 
             var temp_env = try Env.init(self.allocator, environment);
             var it = evaluatedEnv.Environment.bindings.iterator();
@@ -435,19 +381,16 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
         },
         .MemberAccess => |memberAccess| {
             const objectValue = try self._eval(memberAccess.object, environment);
-            if (objectValue.* != .Environment) return InterpreterError.MEMBER_ACCESS_ON_NON_ENVIRONMENT;
 
             const memberValue = objectValue.Environment.get(memberAccess.member);
 
             if (memberValue) |val| return val;
-            return InterpreterError.PROPERTY_NOT_FOUND_ON_OBJECT;
+            unreachable;
         },
         .Module => |mod| {
             const moduleEnvironment = try Env.init(self.allocator, null);
 
             const value = try self._eval(mod.block, moduleEnvironment);
-
-            if (value.* != .Environment) return InterpreterError.EXPECTED_CURRENT_ENVIRONMENT_ON_MODULE_END;
 
             try environment.add(mod.identifier, try self.makeValue(.{
                 .Environment = value.Environment,
@@ -506,9 +449,6 @@ fn matchesPattern(self: *Interpreter, pattern: MatchPattern, value: *Value) Inte
 }
 
 const InterpreterError = error{
-    UNEXPECTED_TYPE,
-    TYPE_PROMOTION_NOT_IMPLEMENTED,
-
     FLOAT_PARSING_FAILED,
     INT_PARSING_FAILED,
 
@@ -516,66 +456,13 @@ const InterpreterError = error{
 
     DIVISION_BY_ZERO,
 
-    UNBOUND_VARIABLE,
     ENVIRONMENT_MAP_ERROR,
     ENVIRONMENT_INITALIZATION_ERROR,
 
     UNMATCHED_PATTERN,
-    MISSING_MATCH_CASE,
-
-    PROPERTY_NOT_FOUND_ON_OBJECT,
-    MEMBER_ACCESS_ON_NON_ENVIRONMENT,
-    EXPECTED_CURRENT_ENVIRONMENT_ON_MODULE_END,
-    EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION,
-
-    IMPORT_FILE_NOT_FOUND,
 
     UNIMPLEMENTED,
 };
-
-fn assertType(values: []const Value, valueTypes: []const ValueType) InterpreterError!void {
-    for (values) |value| {
-        var is_valid = false;
-
-        const current_type = std.meta.activeTag(value);
-
-        for (valueTypes) |allowed_type| {
-            if (current_type == allowed_type) {
-                is_valid = true;
-                break;
-            }
-        }
-
-        if (!is_valid) {
-            return InterpreterError.UNEXPECTED_TYPE;
-        }
-    }
-}
-
-fn castType(val1: *Value, val2: *Value) InterpreterError!void {
-    return switch (val1.*) {
-        .Integer => switch (val2.*) {
-            .Integer => return,
-            .Float => return InterpreterError.TYPE_PROMOTION_NOT_IMPLEMENTED,
-            // .Float => {
-            //     val1.* = Value{
-            //         .Float = @as(f64, @floatFromInt(val_1)),
-            //     };
-            // },
-            else => unreachable,
-        },
-        .Float => switch (val2.*) {
-            .Integer => return InterpreterError.TYPE_PROMOTION_NOT_IMPLEMENTED,
-            // .Integer => |val_2| {
-            //     val2.* = Value{ .Float = @as(f64, @floatFromInt(val_2)) };
-            // },
-            .Float => return,
-            else => unreachable,
-        },
-        .String => {},
-        else => unreachable,
-    };
-}
 
 fn numericOperation(comptime T: type, left: T, right: T, operation: Bop) InterpreterError!T {
     return switch (operation) {
