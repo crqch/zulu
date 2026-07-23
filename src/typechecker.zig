@@ -29,6 +29,11 @@ pub const Type = union(enum) {
 
     Environment: *Scope,
     Tuple: []*Type,
+
+    Alias: struct {
+        name: []const u8,
+        underlying: *Type,
+    },
 };
 
 const Scope = struct {
@@ -174,6 +179,9 @@ pub fn finalizeType(self: *TypeChecker, tp: *Type) *Type {
                 types[i] = self.finalizeType(t);
             }
         },
+        .Alias => |alias| {
+            resolved.Alias.underlying = self.finalizeType(alias.underlying);
+        },
         else => {},
     }
 
@@ -291,6 +299,7 @@ pub const PrettyPrinter = struct {
 
                 return str.items;
             },
+            .Alias => |alias| return alias.name,
         };
     }
 };
@@ -681,7 +690,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, environment: *Scope) 
         .TypeDeclaration => |decl| {
             const blockEnvironment = try self.freshEnvironment(environment);
 
-            const identType = try self.freshWildcard();
+            const identType = try self.makeFreshTypeSpecific(.{ .Alias = .{
+                .name = decl.identifier,
+                .underlying = try self.freshWildcard(),
+            } });
 
             try blockEnvironment.addType(decl.identifier, identType);
             const explicitType = try self.parseTypeAst(decl.typeAst.*, blockEnvironment);
@@ -896,6 +908,9 @@ fn occursInType(self: *TypeChecker, wildcardId: usize, tp: *Type) bool {
             }
             return false;
         },
+        .Alias => |alias| {
+            return self.occursInType(wildcardId, alias.underlying);
+        },
         else => return false,
     }
 }
@@ -932,6 +947,12 @@ fn freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Ty
             }
             return self.makeFreshTypeSpecific(.{ .Environment = freshEnv }) catch return TypeError.OUT_OF_MEMORY;
         },
+        .Alias => |alias| {
+            return self.makeFreshTypeSpecific(.{ .Alias = .{
+                .name = alias.name,
+                .underlying = try self.freshenType(alias.underlying, cache),
+            } }) catch return TypeError.OUT_OF_MEMORY;
+        },
         else => return resolved,
     }
 }
@@ -958,6 +979,13 @@ fn unifyTypes(self: *TypeChecker, rawLeft: *Type, rawRight: *Type) TypeError!voi
         self.substitutions.put(right.Wildcard, left) catch return TypeError.OUT_OF_MEMORY;
         return;
     }
+
+    if (left.* == .Alias and right.* == .Alias and std.mem.eql(u8, left.Alias.name, right.Alias.name)) {
+        return;
+    }
+
+    if (left.* == .Alias) return self.unifyTypes(left.Alias.underlying, right);
+    if (right.* == .Alias) return self.unifyTypes(left, right.Alias.underlying);
 
     if (std.meta.activeTag(left.*) != std.meta.activeTag(right.*)) {
         return TypeError.CANNOT_UNIFY;
