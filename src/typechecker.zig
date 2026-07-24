@@ -228,19 +228,30 @@ const WildcardPrinter = struct {
 pub const PrettyPrinter = struct {
     allocator: std.mem.Allocator,
     wildcardPrinter: WildcardPrinter,
+    visited: std.AutoHashMap(*Type, void),
 
-    pub fn prettyPrint(allocator: std.mem.Allocator, tp: Type) ![]const u8 {
+    pub fn prettyPrint(allocator: std.mem.Allocator, tp: *Type) ![]const u8 {
         var prettyPrinter = PrettyPrinter{
             .allocator = allocator,
             .wildcardPrinter = WildcardPrinter{
                 .wildcardCharMap = std.AutoHashMap(usize, u8).init(allocator),
             },
+            .visited = std.AutoHashMap(*Type, void).init(allocator),
         };
+        defer prettyPrinter.visited.deinit();
+        defer prettyPrinter.wildcardPrinter.wildcardCharMap.deinit();
+
         return prettyPrinter._prettyPrint(tp, 0);
     }
 
-    fn _prettyPrint(self: *PrettyPrinter, tp: Type, level: u8) ![]const u8 {
-        return switch (tp) {
+    fn _prettyPrint(self: *PrettyPrinter, tp: *Type, level: u8) ![]const u8 {
+        if (self.visited.contains(tp)) {
+            return try std.fmt.allocPrint(self.allocator, "<cyclic: {s}>", .{@tagName(tp.*)});
+        }
+
+        try self.visited.put(tp, {});
+        defer _ = self.visited.remove(tp);
+        return switch (tp.*) {
             .Unit => "unit",
             .Boolean => "bool",
             .Float => "float",
@@ -253,10 +264,10 @@ pub const PrettyPrinter = struct {
                     str.print(self.allocator, "(", .{}) catch return TypeError.OUT_OF_MEMORY;
                 }
 
-                str.print(self.allocator, "{s}", .{try self._prettyPrint(types[0].*, 11)}) catch return TypeError.OUT_OF_MEMORY;
+                str.print(self.allocator, "{s}", .{try self._prettyPrint(types[0], 11)}) catch return TypeError.OUT_OF_MEMORY;
 
                 for (types[1..]) |_tp| {
-                    str.print(self.allocator, " * {s}", .{try self._prettyPrint(_tp.*, 11)}) catch return TypeError.OUT_OF_MEMORY;
+                    str.print(self.allocator, " * {s}", .{try self._prettyPrint(_tp, 11)}) catch return TypeError.OUT_OF_MEMORY;
                 }
 
                 if (level >= 11) {
@@ -273,9 +284,9 @@ pub const PrettyPrinter = struct {
                 var buf = try std.ArrayList(u8).initCapacity(self.allocator, 0);
 
                 if (level >= 1) {
-                    try buf.print(self.allocator, "({s} -> {s})", .{ try self._prettyPrint(lam.argType.*, 1), try self._prettyPrint(lam.returnType.*, 0) });
+                    try buf.print(self.allocator, "({s} -> {s})", .{ try self._prettyPrint(lam.argType, 1), try self._prettyPrint(lam.returnType, 0) });
                 } else {
-                    try buf.print(self.allocator, "{s} -> {s}", .{ try self._prettyPrint(lam.argType.*, 1), try self._prettyPrint(lam.returnType.*, 0) });
+                    try buf.print(self.allocator, "{s} -> {s}", .{ try self._prettyPrint(lam.argType, 1), try self._prettyPrint(lam.returnType, 0) });
                 }
                 return buf.items;
             },
@@ -305,12 +316,12 @@ pub const PrettyPrinter = struct {
                 }
 
                 for (values.items) |entry| {
-                    try str.print(self.allocator, "\t\t{s}: {s}\n", .{ entry.key_ptr.*, try self._prettyPrint(entry.value_ptr.*.*, 0) });
+                    try str.print(self.allocator, "\t\t{s}: {s}\n", .{ entry.key_ptr.*, try self._prettyPrint(entry.value_ptr.*, 0) });
                 }
                 try str.print(self.allocator, "\t}}\n\ttypes {{\n", .{});
 
                 for (types.items) |entry| {
-                    try str.print(self.allocator, "\t\t{s}: {s}\n", .{ entry.key_ptr.*, try self._prettyPrint(entry.value_ptr.*.*, 0) });
+                    try str.print(self.allocator, "\t\t{s}: {s}\n", .{ entry.key_ptr.*, try self._prettyPrint(entry.value_ptr.*, 0) });
                 }
 
                 try str.print(self.allocator, "\t}}\n}}\n", .{});
@@ -320,11 +331,11 @@ pub const PrettyPrinter = struct {
             .Alias => |alias| return alias.name,
             .Union => |un| {
                 var str = try std.ArrayList(u8).initCapacity(self.allocator, 0);
-                try str.print(self.allocator, "{s}", .{try self._prettyPrint(un[0].*, level)});
+                try str.print(self.allocator, "{s}", .{try self._prettyPrint(un[0], level)});
 
                 if (un.len > 0) {
                     for (un[1..]) |item| {
-                        try str.print(self.allocator, " | {s}", .{try self._prettyPrint(item.*, level)});
+                        try str.print(self.allocator, " | {s}", .{try self._prettyPrint(item, level)});
                     }
                 }
 
@@ -338,7 +349,7 @@ pub const PrettyPrinter = struct {
                 try str.print(self.allocator, "{s}", .{it.name});
 
                 if (it.payload) |payload| {
-                    try str.print(self.allocator, " of {s}", .{try self._prettyPrint(payload.*, 6)});
+                    try str.print(self.allocator, " of {s}", .{try self._prettyPrint(payload, 6)});
                 }
 
                 if (level >= 6)
@@ -907,7 +918,7 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
             return TypeError.PROPERTY_NOT_FOUND_ON_OBJECT;
         },
         .Module => |module| {
-            const moduleEnvironment = try self.freshEnvironment(null);
+            const moduleEnvironment = try self.freshEnvironment(scope);
 
             const tp = try self._inferType(module.block, moduleEnvironment);
 

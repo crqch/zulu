@@ -122,7 +122,7 @@ pub fn printValue(allocator: std.mem.Allocator, value: *Value) ![]const u8 {
 
             return str.items;
         },
-        .Closure => try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, value.Closure.node.Lambda.inferredType.?.*)}),
+        .Closure => try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, value.Closure.node.Lambda.inferredType.?)}),
         .Variant => {
             if (value.Variant.payload) |payload| {
                 return try std.fmt.allocPrint(allocator, "{s} ({s})", .{ value.Variant.name, try printValue(allocator, payload) });
@@ -417,7 +417,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             unreachable;
         },
         .Module => |mod| {
-            const moduleEnvironment = try Env.init(self.allocator, null);
+            const moduleEnvironment = try Env.init(self.allocator, environment);
 
             const value = try self._eval(mod.block, moduleEnvironment);
 

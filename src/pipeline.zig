@@ -138,9 +138,9 @@ pub fn run(self: *Pipeline, sharedContext: *SharedContext, filePath: []const u8,
 
                     std.debug.print("Expected one of the following types:\n", .{});
                     for (context.UNEXPECTED_TYPE.expectedType) |expectedType| {
-                        std.debug.print(ansi.blue ++ "\t{s}\n" ++ ansi.reset, .{try TypeChecker.PrettyPrinter.prettyPrint(self.typeArena.allocator(), typeChecker.finalizeType(expectedType).*)});
+                        std.debug.print(ansi.blue ++ "\t{s}\n" ++ ansi.reset, .{try TypeChecker.PrettyPrinter.prettyPrint(self.typeArena.allocator(), typeChecker.finalizeType(expectedType))});
                     }
-                    std.debug.print("But got: " ++ ansi.blue ++ "{s}" ++ ansi.reset ++ "\n", .{try TypeChecker.PrettyPrinter.prettyPrint(self.typeArena.allocator(), typeChecker.finalizeType(context.UNEXPECTED_TYPE.foundType).*)});
+                    std.debug.print("But got: " ++ ansi.blue ++ "{s}" ++ ansi.reset ++ "\n", .{try TypeChecker.PrettyPrinter.prettyPrint(self.typeArena.allocator(), typeChecker.finalizeType(context.UNEXPECTED_TYPE.foundType))});
                 }
             },
             else => {
@@ -152,7 +152,7 @@ pub fn run(self: *Pipeline, sharedContext: *SharedContext, filePath: []const u8,
     };
     if (options.@"debug-type") {
         std.debug.print(ansi.bold ++ ansi.green ++ "Typechecker output:\n" ++ ansi.reset, .{});
-        const printedType = try TypeChecker.PrettyPrinter.prettyPrint(self.allocator, typeChecker.finalizeType(programType).*);
+        const printedType = try TypeChecker.PrettyPrinter.prettyPrint(self.allocator, typeChecker.finalizeType(programType));
         std.debug.print("{s}\n", .{printedType});
     }
 
