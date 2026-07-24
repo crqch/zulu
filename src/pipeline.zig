@@ -165,12 +165,6 @@ pub fn run(self: *Pipeline, sharedContext: *SharedContext, filePath: []const u8,
     const value = interpreter.eval(expression) catch |err| {
         printErrorLocation("Runtime Error", filePath);
         switch (err) {
-            error.UNBOUND_VARIABLE => {
-                std.debug.print("Unbound variable (variable referenced before it was defined).\n", .{});
-            },
-            error.UNEXPECTED_TYPE => {
-                std.debug.print("Unexpected type encountered in operation.\n", .{});
-            },
             error.DIVISION_BY_ZERO => {
                 std.debug.print("Division by zero.\n", .{});
             },
@@ -183,32 +177,11 @@ pub fn run(self: *Pipeline, sharedContext: *SharedContext, filePath: []const u8,
             error.ENVIRONMENT_INITALIZATION_ERROR, error.ENVIRONMENT_MAP_ERROR, error.MEMORY_ALLOCATION_FAILED => {
                 std.debug.print("Memory allocation or environment initialization failed.\n", .{});
             },
-            error.TYPE_PROMOTION_NOT_IMPLEMENTED => {
-                std.debug.print("Type promotion not implemented yet.\n", .{});
-            },
             error.UNIMPLEMENTED => {
                 std.debug.print("Unimplemented feature encountered.\n", .{});
             },
-            error.MISSING_MATCH_CASE => {
-                std.debug.print("Missing match case.\n", .{});
-            },
             error.UNMATCHED_PATTERN => {
                 std.debug.print("Pattern unmatched in match.\n", .{});
-            },
-            error.PROPERTY_NOT_FOUND_ON_OBJECT => {
-                std.debug.print("Property not found on object.\n", .{});
-            },
-            error.MEMBER_ACCESS_ON_NON_ENVIRONMENT => {
-                std.debug.print("Member access on non module.\n", .{});
-            },
-            error.EXPECTED_CURRENT_ENVIRONMENT_ON_MODULE_END => {
-                std.debug.print("Expected current environment on module end.\n", .{});
-            },
-            error.IMPORT_FILE_NOT_FOUND => {
-                std.debug.print("Import file not found.\n", .{});
-            },
-            error.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION => {
-                std.debug.print("Expected environment on env expansion.\n", .{});
             },
         }
         if (interpreter.last_expression) |last_expr| {
@@ -236,6 +209,7 @@ fn findTokenByLexemePtr(tokens: []const Token, lexeme: []const u8) ?Token {
 fn findExprLocation(tokens: []const Token, expr: *Expression) ?Token {
     switch (expr.*) {
         .Variable => |v| return findTokenByLexemePtr(tokens, v),
+        .Constructor => |constructor| return findTokenByLexemePtr(tokens, constructor.name),
         .Unit => return null,
         .Number => |n| return findTokenByLexemePtr(tokens, n),
         .Import => |fileName| return findTokenByLexemePtr(tokens, fileName),

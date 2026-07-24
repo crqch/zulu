@@ -11,7 +11,7 @@ const SharedContext = @This();
 const BindingsType = std.StringHashMap(ReturnType);
 
 pub const ReturnType = struct {
-    value: ?Value,
+    value: ?*Value,
     type: ?*Type,
 };
 

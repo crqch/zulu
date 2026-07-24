@@ -113,7 +113,17 @@ fn typeNud(self: *Parser) ParserError!*Expression {
     const identToken = self.tokens[self.current];
     try self.expect(.IDENT);
     try self.expect(.EQ);
-    const typeAst = try self.parseType();
+
+    var types = std.ArrayList(*TypeAst).initCapacity(self.allocator, 1) catch return ParserError.OUT_OF_MEMORY;
+
+    // optional pipe before first type
+    _ = self.matchToken(.PIPE);
+
+    while (true) {
+        types.append(self.allocator, try self.parseType()) catch return ParserError.OUT_OF_MEMORY;
+        if (!self.matchToken(.PIPE)) break;
+    }
+
     try self.expect(.SEMICOLON);
     const index = self.current;
 
@@ -123,7 +133,7 @@ fn typeNud(self: *Parser) ParserError!*Expression {
 
             return self.newExpression(.{ .TypeDeclaration = .{
                 .identifier = identToken.lexeme,
-                .typeAst = typeAst,
+                .typesAst = types.items,
                 .block = try self.newExpression(.CurrentEnvironment),
             } });
         }
@@ -133,7 +143,7 @@ fn typeNud(self: *Parser) ParserError!*Expression {
 
     return self.newExpression(.{ .TypeDeclaration = .{
         .identifier = identToken.lexeme,
-        .typeAst = typeAst,
+        .typesAst = types.items,
         .block = block,
     } });
 }
@@ -270,6 +280,22 @@ fn parsePrimaryPattern(self: *Parser) ParserError!*MatchPattern {
         if (std.mem.eql(u8, token.lexeme, "_")) {
             return try self.newMatchPattern(.Wildcard);
         }
+        if (std.ascii.isUpper(token.lexeme[0])) {
+            const pattern: *MatchPattern = self.parsePattern() catch |err| {
+                if (err == ParserError.PATTERN_EXPECTED) {
+                    return try self.newMatchPattern(.{ .Constructor = .{
+                        .name = token.lexeme,
+                        .payload = null,
+                    } });
+                }
+                return err;
+            };
+
+            return try self.newMatchPattern(.{ .Constructor = .{
+                .name = token.lexeme,
+                .payload = pattern,
+            } });
+        }
         return try self.newMatchPattern(.{ .Identifier = token.lexeme });
     } else if (self.matchToken(.LPAR)) {
         const pattern = try self.parsePattern();
@@ -302,6 +328,16 @@ fn stringNud(self: *Parser) ParserError!*Expression {
 }
 
 fn identNud(self: *Parser) ParserError!*Expression {
+    const firstChar = self.previousToken().lexeme[0];
+    if (firstChar >= 'A' and firstChar <= 'Z') {
+        return try self.newExpression(Expression{
+            .Constructor = .{
+                .name = self.previousToken().lexeme,
+                .payload = null,
+            },
+        });
+    }
+
     return try self.newExpression(Expression{
         .Variable = self.previousToken().lexeme,
     });
@@ -437,6 +473,12 @@ fn memberAccessLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*Exp
 fn applicationLed(self: *Parser, left: *Expression) ParserError!*Expression {
     const right = try self.parseExpression(Precedence.call + 1);
 
+    if (left.* == .Constructor) {
+        left.Constructor.payload = right;
+
+        return left;
+    }
+
     return try self.newExpression(Expression{ .Application = .{
         .callee = left,
         .value = right,
@@ -512,10 +554,34 @@ fn typeAscriptionLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*E
 }
 
 fn parseType(self: *Parser) ParserError!*TypeAst {
+    const left = try self.parseLambda();
+
+    if (self.matchToken(.KW_OF)) {
+        if (left.* != .Identifier or !(left.Identifier[0] >= 'A' and left.Identifier[0] <= 'Z')) return ParserError.UNEXPECTED_TOKEN;
+
+        const right = try self.parseLambda();
+
+        return try self.newTypeAst(.{ .Constructor = .{
+            .name = left.Identifier,
+            .payload = right,
+        } });
+    }
+
+    if (left.* == .Identifier and left.Identifier[0] >= 'A' and left.Identifier[0] <= 'Z') {
+        return try self.newTypeAst(.{ .Constructor = .{
+            .name = left.Identifier,
+            .payload = null,
+        } });
+    }
+
+    return left;
+}
+
+fn parseLambda(self: *Parser) ParserError!*TypeAst {
     const left = try self.parseTupleType();
 
     if (self.matchToken(.ARROW)) {
-        const right = try self.parseType();
+        const right = try self.parseLambda();
 
         return try self.newTypeAst(.{
             .Function = .{

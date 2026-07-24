@@ -31,6 +31,12 @@ pub const MatchPattern = union(enum) {
     Tuple: struct {
         binds: []*MatchPattern,
     },
+
+    Constructor: struct {
+        name: []const u8,
+        payload: ?*MatchPattern,
+    },
+
     Wildcard,
 };
 
@@ -47,6 +53,10 @@ pub const Expression = union(enum) {
     Tuple: []*Expression,
     Unit,
     Variable: []const u8,
+    Constructor: struct {
+        name: []const u8,
+        payload: ?*Expression,
+    },
 
     BinaryOperation: struct {
         operation: Bop,
@@ -91,7 +101,7 @@ pub const Expression = union(enum) {
     },
     TypeDeclaration: struct {
         identifier: []const u8,
-        typeAst: *TypeAst,
+        typesAst: []*TypeAst,
         block: *Expression,
     },
     MemberAccess: struct {
@@ -117,6 +127,10 @@ pub const TypeAst = union(enum) {
     Function: struct {
         argument: *TypeAst,
         returnType: *TypeAst,
+    },
+    Constructor: struct {
+        name: []const u8,
+        payload: ?*TypeAst,
     },
 };
 
@@ -154,6 +168,19 @@ pub const AstPrinter = struct {
                     };
 
                 if (level > 15) try buffer.print(self.allocator, ")", .{});
+
+                return buffer.items;
+            },
+            .Constructor => |constructor| {
+                var buffer = try std.ArrayList(u8).initCapacity(self.allocator, 0);
+                if (level > 25) try buffer.print(self.allocator, "(", .{});
+
+                try buffer.print(self.allocator, "{s}", .{constructor.name});
+                if (constructor.payload) |payload| {
+                    try buffer.print(self.allocator, " of {s}", .{try self.printType(payload.*, 26)});
+                }
+
+                if (level > 25) try buffer.print(self.allocator, ")", .{});
 
                 return buffer.items;
             },
@@ -202,7 +229,17 @@ pub const AstPrinter = struct {
                 try self.printNode(dec.block.*, level + 1);
             },
             .TypeDeclaration => |dec| {
-                try self.buffer.print(self.allocator, "TypeDeclaration ( {s} : {s} )\n", .{ dec.identifier, try self.printType(dec.typeAst.*, 0) });
+                if (dec.typesAst.len == 1)
+                    try self.buffer.print(self.allocator, "TypeDeclaration ( {s} : {s} )\n", .{ dec.identifier, try self.printType(dec.typesAst[0].*, 0) })
+                else {
+                    try self.buffer.print(self.allocator, "TypeDeclaration ( {s} :\n", .{dec.identifier});
+                    for (dec.typesAst) |typeAst| {
+                        try self.buffer.appendNTimes(self.allocator, ' ', level + 1);
+                        try self.buffer.print(self.allocator, "{s}\n", .{try self.printType(typeAst.*, 0)});
+                    }
+                    try self.buffer.appendNTimes(self.allocator, ' ', level);
+                    try self.buffer.print(self.allocator, ")\n", .{});
+                }
 
                 try self.printNode(dec.block.*, level + 1);
             },
@@ -245,6 +282,13 @@ pub const AstPrinter = struct {
             },
             .Variable => |v| {
                 try self.buffer.print(self.allocator, "Variable( {s} )\n", .{v});
+            },
+            .Constructor => |constructor| {
+                try self.buffer.print(self.allocator, "Constructor( {s} )\n", .{constructor.name});
+
+                if (constructor.payload) |payload| {
+                    try self.printNode(payload.*, level + 1);
+                }
             },
             .BinaryOperation => |bop| {
                 try self.buffer.print(self.allocator, "BinaryOperation( {s} )\n", .{@tagName(bop.operation)});
@@ -319,6 +363,11 @@ pub const AstPrinter = struct {
                 for (patterns.binds) |_pattern| {
                     try self.printPattern(_pattern.*, level + 1);
                 }
+            },
+            .Constructor => |constructor| {
+                try self.buffer.print(self.allocator, "Constructor ( {s} )\n", .{constructor.name});
+                if (constructor.payload) |payload|
+                    try self.printPattern(payload.*, level + 1);
             },
         }
     }

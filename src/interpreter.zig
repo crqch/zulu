@@ -72,6 +72,8 @@ const ValueType = enum {
     Integer,
     String,
 
+    Variant,
+
     Closure,
 
     Tuple,
@@ -85,6 +87,11 @@ pub const Value = union(ValueType) {
     Float: f64,
     Integer: i64,
     String: []const u8,
+
+    Variant: struct {
+        name: []const u8,
+        payload: ?*Value,
+    },
 
     Closure: struct {
         node: *Expression,
@@ -116,6 +123,13 @@ pub fn printValue(allocator: std.mem.Allocator, value: *Value) ![]const u8 {
             return str.items;
         },
         .Closure => try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, value.Closure.node.Lambda.inferredType.?.*)}),
+        .Variant => {
+            if (value.Variant.payload) |payload| {
+                return try std.fmt.allocPrint(allocator, "{s} ({s})", .{ value.Variant.name, try printValue(allocator, payload) });
+            } else {
+                return try std.fmt.allocPrint(allocator, "{s}", .{value.Variant.name});
+            }
+        },
         .Environment => |env| {
             var str = std.ArrayList(u8).initCapacity(allocator, 0) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
 
@@ -199,6 +213,20 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             }
             unreachable;
         },
+        .Constructor => |constructor| {
+            var evaluatedPayload: ?*Value = null;
+
+            if (constructor.payload) |payload| {
+                evaluatedPayload = try self._eval(payload, environment);
+            }
+
+            return try self.makeValue(.{
+                .Variant = .{
+                    .name = try self.reallocateIdentifier(constructor.name),
+                    .payload = evaluatedPayload,
+                },
+            });
+        },
         .Tuple => |expressions| {
             var values = std.ArrayList(*Value).initCapacity(self.allocator, expressions.len) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
 
@@ -241,9 +269,10 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
         .Declaration => |declaration| {
             var blockEnvironment = try Env.init(self.allocator, environment);
 
+            const identifier = try self.reallocateIdentifier(declaration.identifier);
             const evaluatedExpression = try self._eval(declaration.expression, if (declaration.identifier[0] == '@') blockEnvironment else environment);
 
-            try blockEnvironment.add(declaration.identifier, evaluatedExpression);
+            try blockEnvironment.add(identifier, evaluatedExpression);
 
             return try self._eval(declaration.block, blockEnvironment);
         },
@@ -404,6 +433,10 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
     }
 }
 
+fn reallocateIdentifier(self: *Interpreter, str: []const u8) InterpreterError![]const u8 {
+    return self.sharedContext.allocator.dupe(u8, str) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+}
+
 fn makeValue(self: *Interpreter, value: Value) InterpreterError!*Value {
     const freshValue = self.allocator.create(Value) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
 
@@ -427,6 +460,11 @@ fn expandEnvByPattern(self: *Interpreter, environment: *Env, pattern: MatchPatte
         .Identifier => |ident| {
             try environment.add(ident, value);
         },
+        .Constructor => |constructor| {
+            if (constructor.payload) |payload| {
+                return try self.expandEnvByPattern(environment, payload.*, value.Variant.payload.?);
+            }
+        },
         .Wildcard => {},
     };
 }
@@ -443,6 +481,17 @@ fn matchesPattern(self: *Interpreter, pattern: MatchPattern, value: *Value) Inte
                 if (!try self.matchesPattern(pat.*, val)) return false;
             }
             return true;
+        },
+        .Constructor => |constructor| {
+            if (value.* != .Variant or !std.mem.eql(u8, value.Variant.name, constructor.name)) return false;
+
+            if (constructor.payload) |constructorPayload| {
+                if (value.Variant.payload) |variantPayload| {
+                    return try self.matchesPattern(constructorPayload.*, variantPayload);
+                }
+                return false;
+            }
+            return value.Variant.payload == null;
         },
         .Identifier, .Wildcard => true,
     };
