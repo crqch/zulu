@@ -1,0 +1,14 @@
+type bop =
+    | Add
+    | Sub
+    | Mult
+    | Div;
+
+type node =
+    | Unit
+    | Int of int
+    | Float of float
+    | String of string
+    | Bool of bool
+    | BinOp of bop * node * node;
+

@@ -1,0 +1,43 @@
+import "ast.zul"@
+
+type value =
+    | VUnit
+    | VInt of int
+    | VFloat of float
+    | VString of string
+    | VBool of bool;
+
+mod _private {
+    handle_bop=[(bop: bop) (a:value) (b:value);
+    match a,b
+        | (VInt a), (VInt b) =>
+            (
+            match bop
+                | Add => VInt (a + b)
+                | Sub => VInt (a - b)
+                | Div => VInt (a / b)
+                | Mult => VInt (a * b)
+            )
+        | (VFloat a), (VFloat b) =>
+            (
+            match bop
+                | Add => VFloat (a + b)
+                | Sub => VFloat (a - b)
+                | Div => VFloat (a / b)
+                | Mult => VFloat (a * b)
+            )
+        | _ => VUnit
+    ];
+
+    @eval=[(expr: node);
+    match expr
+        | Int x => VInt x
+        | Float x => VFloat x
+        | String x => VString x
+        | Bool x => VBool x
+        | BinOp bop, a, b => handle_bop bop (@eval a) (@eval b)
+        | _ => VUnit
+    ];
+}
+
+eval=_private.@eval;
