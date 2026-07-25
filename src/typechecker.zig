@@ -116,6 +116,7 @@ pub const TypeError = error{
 
     MissingMatchCase,
     UnmatchedPattern,
+    PatternOverusedVariable,
 
     PropertyNotFoundOnObject,
     MemberAccessOnNonEnvrionment,
@@ -857,9 +858,12 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
             var seen_constructors = std.StringHashMap(void).init(self.allocator);
             defer seen_constructors.deinit();
 
+            var seen_variables = std.StringHashMap(void).init(self.allocator);
+            defer seen_variables.deinit();
+
             for (match.cases) |case| {
                 const fresh_scope = try self.freshScope(scope);
-                const pattern_tp = try self.inferPattern(fresh_scope, case.pattern.*);
+                const pattern_tp = try self.inferPattern(fresh_scope, case.pattern.*, &seen_variables);
 
                 self.unifyTypes(scrutinee_type, pattern_tp) catch {
                     return TypeError.UnmatchedPattern;
@@ -1042,18 +1046,20 @@ fn reallocateIdentifier(self: *TypeChecker, str: []const u8) TypeError![]const u
     return str;
 }
 
-fn inferPattern(self: *TypeChecker, scope: *Scope, pattern: MatchPattern) TypeError!*Type {
+fn inferPattern(self: *TypeChecker, scope: *Scope, pattern: MatchPattern, seen_variables: *std.StringHashMap(void)) TypeError!*Type {
     return switch (pattern) {
         .wildcard => self.freshWildcard(),
         .identifier => |identifier| {
+            if (seen_variables.get(identifier)) |_| return TypeError.PatternOverusedVariable;
             const fresh_type = try self.freshWildcard();
             try scope.addValue(identifier, fresh_type);
+            try seen_variables.put(identifier, {});
             return fresh_type;
         },
         .tuple => |tuple| {
             var types = std.ArrayList(*Type).initCapacity(self.allocator, tuple.binds.len) catch return TypeError.OutOfMemory;
             for (tuple.binds) |pat| {
-                types.append(self.allocator, try self.inferPattern(scope, pat.*)) catch return TypeError.OutOfMemory;
+                types.append(self.allocator, try self.inferPattern(scope, pat.*, seen_variables)) catch return TypeError.OutOfMemory;
             }
             return try self.makeFreshTypeSpecific(.{ .tuple = types.items });
         },
@@ -1063,7 +1069,7 @@ fn inferPattern(self: *TypeChecker, scope: *Scope, pattern: MatchPattern) TypeEr
 
             if (type_def.variant.payload) |expectedPayload| {
                 if (constructor.payload) |actualPayloadAst| {
-                    const actual_payload_type = try self.inferPattern(scope, actualPayloadAst.*);
+                    const actual_payload_type = try self.inferPattern(scope, actualPayloadAst.*, seen_variables);
                     try self.unifyTypes(expectedPayload, actual_payload_type);
                 } else {
                     return TypeError.MissingConstructorPayload;
