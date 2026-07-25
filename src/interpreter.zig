@@ -105,10 +105,10 @@ pub const Value = union(ValueType) {
 pub fn printValue(allocator: std.mem.Allocator, value: *Value) ![]const u8 {
     return switch (value.*) {
         .unit => "unit",
-        .boolean => if (value.boolean) "true" else "false",
-        .float => try std.fmt.allocPrint(allocator, "{d}", .{value.float}),
-        .integer => try std.fmt.allocPrint(allocator, "{d}", .{value.integer}),
-        .string => try std.fmt.allocPrint(allocator, "\"{s}\"", .{value.string}),
+        .boolean => |boolean| if (boolean) "true" else "false",
+        .float => |float| try std.fmt.allocPrint(allocator, "{d}", .{float}),
+        .integer => |integer| try std.fmt.allocPrint(allocator, "{d}", .{integer}),
+        .string => |string| try std.fmt.allocPrint(allocator, "\"{s}\"", .{string}),
         .tuple => |values| {
             var str = try std.ArrayList(u8).initCapacity(allocator, 0);
 
@@ -122,21 +122,21 @@ pub fn printValue(allocator: std.mem.Allocator, value: *Value) ![]const u8 {
 
             return str.items;
         },
-        .closure => try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, value.closure.node.lambda.inferred_type.?)}),
-        .variant => {
-            if (value.variant.payload) |payload| {
-                return try std.fmt.allocPrint(allocator, "{s} ({s})", .{ value.variant.name, try printValue(allocator, payload) });
+        .closure => |closure| try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, closure.node.lambda.inferred_type.?)}),
+        .variant => |variant| {
+            if (variant.payload) |payload| {
+                return try std.fmt.allocPrint(allocator, "{s} ({s})", .{ variant.name, try printValue(allocator, payload) });
             } else {
-                return try std.fmt.allocPrint(allocator, "{s}", .{value.variant.name});
+                return try std.fmt.allocPrint(allocator, "{s}", .{variant.name});
             }
         },
-        .environment => |env| {
+        .environment => |environment| {
             var str = std.ArrayList(u8).initCapacity(allocator, 0) catch return InterpreterError.MemoryAllocationFailed;
 
             try str.print(allocator, "env {{\n", .{});
             var entries = try std.ArrayList(std.StringHashMap(*Value).Entry).initCapacity(allocator, 0);
 
-            var current_env: ?*Env = env;
+            var current_env: ?*Env = environment;
             while (current_env) |curr| {
                 var iterator = curr.bindings.iterator();
 
@@ -169,12 +169,12 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
         .unit => {
             return try self.makeValue(.{ .unit = {} });
         },
-        .number => |num| {
-            const period_index = std.mem.find(u8, num, ".");
+        .number => |number| {
+            const period_index = std.mem.find(u8, number, ".");
 
             if (period_index) |index| {
                 if (index == 0) {
-                    expression.number = std.fmt.allocPrint(self.allocator, "0{s}", .{num}) catch {
+                    expression.number = std.fmt.allocPrint(self.allocator, "0{s}", .{number}) catch {
                         return InterpreterError.MemoryAllocationFailed;
                     };
                 }
@@ -186,7 +186,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             }
 
             // TODO: Add other number bases
-            const int = std.fmt.parseInt(i32, num, 10) catch {
+            const int = std.fmt.parseInt(i32, number, 10) catch {
                 return InterpreterError.IntParsingFailed;
             };
             return try self.makeValue(.{ .integer = int });
@@ -201,8 +201,8 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             }
             unreachable;
         },
-        .string => |str| {
-            return try self.makeValue(.{ .string = str });
+        .string => |string| {
+            return try self.makeValue(.{ .string = string });
         },
         .boolean => |boolean| {
             return try self.makeValue(.{ .boolean = boolean });
@@ -227,11 +227,11 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 },
             });
         },
-        .tuple => |expressions| {
-            var values = std.ArrayList(*Value).initCapacity(self.allocator, expressions.len) catch return InterpreterError.MemoryAllocationFailed;
+        .tuple => |tuple| {
+            var values = std.ArrayList(*Value).initCapacity(self.allocator, tuple.len) catch return InterpreterError.MemoryAllocationFailed;
 
-            for (expressions) |ex| {
-                values.append(self.allocator, try self._eval(ex, environment)) catch return InterpreterError.MemoryAllocationFailed;
+            for (tuple) |it| {
+                values.append(self.allocator, try self._eval(it, environment)) catch return InterpreterError.MemoryAllocationFailed;
             }
 
             return try self.makeValue(.{
@@ -247,10 +247,10 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             });
         },
         .not => |not| {
-            const notValue = try self._eval(not, environment);
+            const not_value = try self._eval(not, environment);
 
             return try self.makeValue(.{
-                .boolean = !notValue.boolean,
+                .boolean = !not_value.boolean,
             });
         },
         .unary_minus => |unary_minus| {
@@ -276,8 +276,8 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
 
             return try self._eval(declaration.block, block_environment);
         },
-        .type_declaration => |declaration| {
-            return try self._eval(declaration.block, environment);
+        .type_declaration => |type_declaration| {
+            return try self._eval(type_declaration.block, environment);
         },
         .application => |application| {
             const evaluated_callee = try self._eval(application.callee, environment);
@@ -416,16 +416,16 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             if (member_value) |val| return val;
             unreachable;
         },
-        .module => |mod| {
+        .module => |module| {
             const module_environment = try Env.init(self.allocator, environment);
 
-            const value = try self._eval(mod.block, module_environment);
+            const value = try self._eval(module.block, module_environment);
 
-            try environment.add(mod.identifier, try self.makeValue(.{
+            try environment.add(module.identifier, try self.makeValue(.{
                 .environment = value.environment,
             }));
 
-            return self._eval(mod.rest, environment);
+            return self._eval(module.rest, environment);
         },
         .type_ascription => |type_ascription| {
             return self._eval(type_ascription.expression, environment);
@@ -451,14 +451,14 @@ fn expandEnvByPattern(self: *Interpreter, environment: *Env, pattern: MatchPatte
             _ = cons;
             return InterpreterError.Unimplemented;
         },
-        .tuple => |idents| {
-            if (value.* != .tuple or value.tuple.len != idents.binds.len) return InterpreterError.UnmatchedPattern;
-            for (idents.binds, value.tuple) |pat, val| {
+        .tuple => |tuple| {
+            if (value.* != .tuple or value.tuple.len != tuple.binds.len) return InterpreterError.UnmatchedPattern;
+            for (tuple.binds, value.tuple) |pat, val| {
                 try self.expandEnvByPattern(environment, pat.*, val);
             }
         },
-        .identifier => |ident| {
-            try environment.add(ident, value);
+        .identifier => |identifier| {
+            try environment.add(identifier, value);
         },
         .constructor => |constructor| {
             if (constructor.payload) |payload| {
@@ -475,9 +475,9 @@ fn matchesPattern(self: *Interpreter, pattern: MatchPattern, value: *Value) Inte
             _ = cons;
             return InterpreterError.Unimplemented;
         },
-        .tuple => |idents| {
-            if (value.* != .tuple or value.tuple.len != idents.binds.len) return false;
-            for (idents.binds, value.tuple) |pat, val| {
+        .tuple => |tuple| {
+            if (value.* != .tuple or value.tuple.len != tuple.binds.len) return false;
+            for (tuple.binds, value.tuple) |pat, val| {
                 if (!try self.matchesPattern(pat.*, val)) return false;
             }
             return true;
