@@ -127,6 +127,7 @@ pub const TypeError = error{
     MISSING_CONSTRUCTOR_PAYLOAD,
     UNEXPECTED_CONSTRUCTOR_PAYLOAD,
     UNBOUND_CONSTRUCTOR,
+    CONSTRUCTOR_NAME_REPEATED,
 
     UNIMPLEMENTED,
     IMPORT_FILE_NOT_FOUND,
@@ -790,14 +791,22 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
                 }
             } else {
                 var types = std.ArrayList(*Type).initCapacity(self.allocator, decl.typesAst.len) catch return TypeError.OUT_OF_MEMORY;
+                var usedIdentifiers = std.StringHashMap(void).init(self.allocator);
+                defer usedIdentifiers.deinit();
 
                 for (decl.typesAst) |typeAst| {
                     if (typeAst.* != .Constructor) return TypeError.EXPECTED_CONSTRUCTOR;
+
+                    if (usedIdentifiers.get(typeAst.Constructor.name)) |_| {
+                        return TypeError.CONSTRUCTOR_NAME_REPEATED;
+                    }
                     const parsedType = try self.parseTypeAst(typeAst.*, blockEnvironment);
 
                     if (parsedType.* == .Variant) {
                         parsedType.Variant.parentUnion = identType;
                     }
+
+                    usedIdentifiers.put(parsedType.Variant.name, {}) catch return TypeError.OUT_OF_MEMORY;
 
                     types.append(
                         self.allocator,
