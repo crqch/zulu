@@ -1,0 +1,3 @@
+(a: number)=5;
+---
+UNBOUND_TYPE

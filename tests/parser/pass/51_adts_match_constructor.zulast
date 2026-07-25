@@ -1,0 +1,15 @@
+match Some 2
+    | Some x => x
+    | None => 0
+---
+Match
+ Constructor( Some )
+  Number( 2 )
+ Case
+  |Constructor ( Some )
+   |Identifier ( x )
+  Variable( x )
+ Case
+  |Constructor ( None )
+  Number( 0 )
+

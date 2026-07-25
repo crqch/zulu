@@ -1,0 +1,36 @@
+type a = int;
+type b = float;
+type optional =
+    | Some of int
+    | None;
+type node =
+    | Unit
+    | Int of int
+    | Float of float
+    | String of string
+    | Bool of bool
+    | Group of node;
+---
+env {
+	values {
+	}
+	types {
+		unit: unit
+		float: float
+		int: int
+		bool: bool
+		string: string
+		a: a
+		b: b
+		optional: optional
+		None: None
+		Some: Some of int
+		Bool: Bool of bool
+		Float: Float of float
+		Unit: Unit
+		Int: Int of int
+		Group: Group of node
+		String: String of string
+		node: node
+	}
+}

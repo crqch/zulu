@@ -1,0 +1,8 @@
+type optional =
+    | Some of int
+    | None;
+match Some 2
+    | Some x => x
+    | None => 0
+---
+int

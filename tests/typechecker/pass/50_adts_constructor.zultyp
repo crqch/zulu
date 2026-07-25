@@ -1,0 +1,6 @@
+type optional =
+    | Some of int
+    | None;
+Some 2
+---
+optional
