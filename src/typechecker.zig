@@ -110,6 +110,7 @@ pub const TypeError = error{
 
     UNBOUND_VARIABLE,
 
+    UNBOUND_TYPE,
     UNEXPECTED_TYPE,
     CANNOT_UNIFY,
 
@@ -998,7 +999,7 @@ fn parseTypeAst(self: *TypeChecker, typeAst: TypeAst, environment: *Scope) TypeE
 
                 return newWildcard;
             }
-            return TypeError.UNBOUND_VARIABLE;
+            return TypeError.UNBOUND_TYPE;
         },
         .Tuple => |tupleElements| {
             var elements = std.ArrayList(*Type).initCapacity(self.allocator, 1) catch return TypeError.OUT_OF_MEMORY;
