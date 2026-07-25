@@ -7,41 +7,41 @@ const SharedContext = @import("./shared.zig");
 
 const TypeChecker = @This();
 allocator: std.mem.Allocator,
-errorContext: ?TypeErrorContext,
-sharedContext: ?*SharedContext,
+error_context: ?TypeErrorContext,
+shared_context: ?*SharedContext,
 
-nextWildcardId: usize,
+next_wildcard_id: usize,
 substitutions: std.AutoHashMap(usize, *Type),
 
 pub const Type = union(enum) {
-    Wildcard: usize,
+    wildcard: usize,
 
-    Unit,
-    Boolean,
-    Float,
-    Int,
-    String,
+    unit,
+    boolean,
+    float,
+    int,
+    string,
 
-    Lambda: struct {
-        argType: *Type,
-        returnType: *Type,
+    lambda: struct {
+        argument: *Type,
+        returns: *Type,
     },
 
-    Scope: *Scope,
-    Tuple: []*Type,
+    scope: *Scope,
+    tuple: []*Type,
 
-    Alias: struct {
+    alias: struct {
         name: []const u8,
         underlying: *Type,
     },
 
-    Variant: struct {
+    variant: struct {
         name: []const u8,
         payload: ?*Type,
-        parentUnion: ?*Type,
+        parent_union: ?*Type,
     },
 
-    Union: []*Type,
+    union_of: []*Type,
 };
 
 const Scope = struct {
@@ -53,7 +53,7 @@ const Scope = struct {
 
     pub fn init(allocator: std.mem.Allocator, parent: ?*Scope) TypeError!*Scope {
         const env = allocator.create(Scope) catch {
-            return TypeError.ENVIRONMENT_INITALIZATION_ERROR;
+            return TypeError.EnvironmentInitializationError;
         };
 
         env.* = Scope{
@@ -68,7 +68,7 @@ const Scope = struct {
 
     fn addValue(self: *Scope, identifier: []const u8, tp: *Type) !void {
         self.values.put(identifier, tp) catch {
-            return TypeError.ENVIRONMENT_MAP_ERROR;
+            return TypeError.EnvironmentMapError;
         };
     }
 
@@ -86,7 +86,7 @@ const Scope = struct {
 
     fn addType(self: *Scope, identifier: []const u8, tp: *Type) !void {
         self.types.put(identifier, tp) catch {
-            return TypeError.ENVIRONMENT_MAP_ERROR;
+            return TypeError.EnvironmentMapError;
         };
     }
 
@@ -104,103 +104,103 @@ const Scope = struct {
 };
 
 pub const TypeError = error{
-    OUT_OF_MEMORY,
-    ENVIRONMENT_INITALIZATION_ERROR,
-    ENVIRONMENT_MAP_ERROR,
+    OutOfMemory,
+    EnvironmentInitializationError,
+    EnvironmentMapError,
 
-    UNBOUND_VARIABLE,
+    UnboundVariable,
 
-    UNBOUND_TYPE,
-    UNEXPECTED_TYPE,
-    CANNOT_UNIFY,
+    UnboundType,
+    UnexpectedType,
+    CannotUnify,
 
-    MISSING_MATCH_CASE,
-    UNMATCHED_PATTERN,
+    MissingMatchCase,
+    UnmatchedPattern,
 
-    PROPERTY_NOT_FOUND_ON_OBJECT,
-    MEMBER_ACCESS_ON_NON_ENVIRONMENT,
-    EXPECTED_ENVIRONMENT_TYPE_ON_MODULE_END,
-    SHADOWING_BY_MODULE_NOT_ALLOWED,
-    EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION,
+    PropertyNotFoundOnObject,
+    MemberAccessOnNonEnvrionment,
+    ExpectedEnvironmentTypeOnModuleEnd,
+    ShadowingByModuleNotAllowed,
+    ExpectedEnvironmentOnEnvExpansion,
 
-    EXPECTED_CONSTRUCTOR,
-    MISSING_CONSTRUCTOR_PAYLOAD,
-    UNEXPECTED_CONSTRUCTOR_PAYLOAD,
-    UNBOUND_CONSTRUCTOR,
-    CONSTRUCTOR_NAME_REPEATED,
+    ExpectedConstructor,
+    MissingConstructorPayload,
+    UnexpectedConstructorPayload,
+    UnboundConstructor,
+    DuplicatedConstructor,
 
-    UNIMPLEMENTED,
-    IMPORT_FILE_NOT_FOUND,
+    Unimplemented,
+    ImportFileNotFound,
 };
 
 const TypeErrorContext = union(enum) {
-    UNBOUND_VARIABLE: struct {
+    unbound_variable: struct {
         variable: []const u8,
     },
-    UNEXPECTED_TYPE: struct {
-        expectedType: []const *Type,
-        foundType: *Type,
+    unexpected_type: struct {
+        expected_type: []const *Type,
+        found_type: *Type,
         context: *Expression,
     },
 };
 
-pub fn init(allocator: std.mem.Allocator, sharedContext: ?*SharedContext) TypeChecker {
+pub fn init(allocator: std.mem.Allocator, shared_context: ?*SharedContext) TypeChecker {
     return TypeChecker{
         .allocator = allocator,
-        .errorContext = null,
-        .sharedContext = sharedContext,
+        .error_context = null,
+        .shared_context = shared_context,
 
-        .nextWildcardId = 0,
+        .next_wildcard_id = 0,
         .substitutions = std.AutoHashMap(usize, *Type).init(allocator),
     };
 }
 
-fn freshEnvironment(self: *TypeChecker, parentEnvironment: ?*Scope) !*Scope {
-    const freshScope = try Scope.init(self.allocator, parentEnvironment);
+fn freshScope(self: *TypeChecker, parent_scope: ?*Scope) !*Scope {
+    const fresh_scope = try Scope.init(self.allocator, parent_scope);
 
-    if (parentEnvironment == null) {
-        try freshScope.addType("bool", try self.makeFreshTypeSpecific(.Boolean));
-        try freshScope.addType("int", try self.makeFreshTypeSpecific(.Int));
-        try freshScope.addType("float", try self.makeFreshTypeSpecific(.Float));
-        try freshScope.addType("string", try self.makeFreshTypeSpecific(.String));
-        try freshScope.addType("unit", try self.makeFreshTypeSpecific(.Unit));
+    if (parent_scope == null) {
+        try fresh_scope.addType("bool", try self.makeFreshTypeSpecific(.boolean));
+        try fresh_scope.addType("int", try self.makeFreshTypeSpecific(.int));
+        try fresh_scope.addType("float", try self.makeFreshTypeSpecific(.float));
+        try fresh_scope.addType("string", try self.makeFreshTypeSpecific(.string));
+        try fresh_scope.addType("unit", try self.makeFreshTypeSpecific(.unit));
     }
 
-    return freshScope;
+    return fresh_scope;
 }
 
 pub fn inferType(self: *TypeChecker, expression: *Expression) TypeError!*Type {
-    const typeEnv = try self.freshEnvironment(null);
+    const fresh_scope = try self.freshScope(null);
 
-    return self.finalizeType(try self._inferType(expression, typeEnv));
+    return self.finalizeType(try self._inferType(expression, fresh_scope));
 }
 
 pub fn finalizeType(self: *TypeChecker, tp: *Type) *Type {
     const resolved = self.applySubstitutions(tp);
 
     switch (resolved.*) {
-        .Lambda => {
-            resolved.Lambda.argType = self.finalizeType(resolved.Lambda.argType);
-            resolved.Lambda.returnType = self.finalizeType(resolved.Lambda.returnType);
+        .lambda => {
+            resolved.lambda.argument = self.finalizeType(resolved.lambda.argument);
+            resolved.lambda.returns = self.finalizeType(resolved.lambda.returns);
         },
-        .Scope => |scope| {
-            var itValues = scope.values.iterator();
-            while (itValues.next()) |entry| {
+        .scope => |scope| {
+            var it_values = scope.values.iterator();
+            while (it_values.next()) |entry| {
                 entry.value_ptr.* = self.finalizeType(entry.value_ptr.*);
             }
 
-            var itTypes = scope.types.iterator();
-            while (itTypes.next()) |entry| {
+            var it_types = scope.types.iterator();
+            while (it_types.next()) |entry| {
                 entry.value_ptr.* = self.finalizeType(entry.value_ptr.*);
             }
         },
-        .Tuple => |types| {
+        .tuple => |types| {
             for (types, 0..) |t, i| {
                 types[i] = self.finalizeType(t);
             }
         },
-        .Alias => |alias| {
-            resolved.Alias.underlying = self.finalizeType(alias.underlying);
+        .alias => |alias| {
+            resolved.alias.underlying = self.finalizeType(alias.underlying);
         },
         else => {},
     }
@@ -209,39 +209,39 @@ pub fn finalizeType(self: *TypeChecker, tp: *Type) *Type {
 }
 
 fn freshWildcard(self: *TypeChecker) !*Type {
-    const wildcard = try self.makeFreshTypeSpecific(.{ .Wildcard = self.nextWildcardId });
-    self.nextWildcardId += 1;
+    const wildcard = try self.makeFreshTypeSpecific(.{ .wildcard = self.next_wildcard_id });
+    self.next_wildcard_id += 1;
     return wildcard;
 }
 
 const WildcardPrinter = struct {
-    currentWildcardChar: u8 = 'a',
-    wildcardCharMap: std.AutoHashMap(usize, u8),
+    current_wildcard_char: u8 = 'a',
+    wildcard_char_map: std.AutoHashMap(usize, u8),
 
     fn getChar(self: *WildcardPrinter, wildcardId: usize) !u8 {
-        if (self.wildcardCharMap.get(wildcardId)) |char| return char;
+        if (self.wildcard_char_map.get(wildcardId)) |char| return char;
 
-        defer self.currentWildcardChar += 1;
-        try self.wildcardCharMap.put(wildcardId, self.currentWildcardChar);
-        return self.currentWildcardChar;
+        defer self.current_wildcard_char += 1;
+        try self.wildcard_char_map.put(wildcardId, self.current_wildcard_char);
+        return self.current_wildcard_char;
     }
 };
 
 pub const PrettyPrinter = struct {
     allocator: std.mem.Allocator,
-    wildcardPrinter: WildcardPrinter,
+    wildcard_printer: WildcardPrinter,
     visited: std.AutoHashMap(*Type, void),
 
     pub fn prettyPrint(allocator: std.mem.Allocator, tp: *Type) ![]const u8 {
         var prettyPrinter = PrettyPrinter{
             .allocator = allocator,
-            .wildcardPrinter = WildcardPrinter{
-                .wildcardCharMap = std.AutoHashMap(usize, u8).init(allocator),
+            .wildcard_printer = WildcardPrinter{
+                .wildcard_char_map = std.AutoHashMap(usize, u8).init(allocator),
             },
             .visited = std.AutoHashMap(*Type, void).init(allocator),
         };
         defer prettyPrinter.visited.deinit();
-        defer prettyPrinter.wildcardPrinter.wildcardCharMap.deinit();
+        defer prettyPrinter.wildcard_printer.wildcard_char_map.deinit();
 
         return prettyPrinter._prettyPrint(tp, 0);
     }
@@ -254,45 +254,45 @@ pub const PrettyPrinter = struct {
         try self.visited.put(tp, {});
         defer _ = self.visited.remove(tp);
         return switch (tp.*) {
-            .Unit => "unit",
-            .Boolean => "bool",
-            .Float => "float",
-            .Int => "int",
-            .String => "string",
-            .Tuple => |types| {
-                var str = std.ArrayList(u8).initCapacity(self.allocator, (types.len - 1) * 3) catch return TypeError.OUT_OF_MEMORY;
+            .unit => "unit",
+            .boolean => "bool",
+            .float => "float",
+            .int => "int",
+            .string => "string",
+            .tuple => |types| {
+                var str = std.ArrayList(u8).initCapacity(self.allocator, (types.len - 1) * 3) catch return TypeError.OutOfMemory;
 
                 if (level >= 11) {
-                    str.print(self.allocator, "(", .{}) catch return TypeError.OUT_OF_MEMORY;
+                    str.print(self.allocator, "(", .{}) catch return TypeError.OutOfMemory;
                 }
 
-                str.print(self.allocator, "{s}", .{try self._prettyPrint(types[0], 11)}) catch return TypeError.OUT_OF_MEMORY;
+                str.print(self.allocator, "{s}", .{try self._prettyPrint(types[0], 11)}) catch return TypeError.OutOfMemory;
 
-                for (types[1..]) |_tp| {
-                    str.print(self.allocator, " * {s}", .{try self._prettyPrint(_tp, 11)}) catch return TypeError.OUT_OF_MEMORY;
+                for (types[1..]) |it| {
+                    str.print(self.allocator, " * {s}", .{try self._prettyPrint(it, 11)}) catch return TypeError.OutOfMemory;
                 }
 
                 if (level >= 11) {
-                    str.print(self.allocator, ")", .{}) catch return TypeError.OUT_OF_MEMORY;
+                    str.print(self.allocator, ")", .{}) catch return TypeError.OutOfMemory;
                 }
 
                 return str.items;
             },
-            .Wildcard => |wild| {
-                const char = try self.wildcardPrinter.getChar(wild);
+            .wildcard => |wild| {
+                const char = try self.wildcard_printer.getChar(wild);
                 return try std.fmt.allocPrint(self.allocator, "'{c}", .{char});
             },
-            .Lambda => |lam| {
+            .lambda => |lam| {
                 var buf = try std.ArrayList(u8).initCapacity(self.allocator, 0);
 
                 if (level >= 1) {
-                    try buf.print(self.allocator, "({s} -> {s})", .{ try self._prettyPrint(lam.argType, 1), try self._prettyPrint(lam.returnType, 0) });
+                    try buf.print(self.allocator, "({s} -> {s})", .{ try self._prettyPrint(lam.argument, 1), try self._prettyPrint(lam.returns, 0) });
                 } else {
-                    try buf.print(self.allocator, "{s} -> {s}", .{ try self._prettyPrint(lam.argType, 1), try self._prettyPrint(lam.returnType, 0) });
+                    try buf.print(self.allocator, "{s} -> {s}", .{ try self._prettyPrint(lam.argument, 1), try self._prettyPrint(lam.returns, 0) });
                 }
                 return buf.items;
             },
-            .Scope => |env| {
+            .scope => |env| {
                 var str = try std.ArrayList(u8).initCapacity(self.allocator, 0);
 
                 try str.print(self.allocator, "env {{\n", .{});
@@ -303,16 +303,16 @@ pub const PrettyPrinter = struct {
 
                 var current_env: ?*Scope = env;
                 while (current_env) |curr| {
-                    var valuesIterator = curr.values.iterator();
+                    var values_iterator = curr.values.iterator();
 
-                    while (valuesIterator.next()) |entry| {
-                        values.insert(self.allocator, 0, entry) catch return TypeError.OUT_OF_MEMORY;
+                    while (values_iterator.next()) |entry| {
+                        values.insert(self.allocator, 0, entry) catch return TypeError.OutOfMemory;
                     }
 
-                    var typesIterator = curr.types.iterator();
+                    var types_iterator = curr.types.iterator();
 
-                    while (typesIterator.next()) |entry| {
-                        types.insert(self.allocator, 0, entry) catch return TypeError.OUT_OF_MEMORY;
+                    while (types_iterator.next()) |entry| {
+                        types.insert(self.allocator, 0, entry) catch return TypeError.OutOfMemory;
                     }
                     current_env = curr.parent;
                 }
@@ -330,27 +330,27 @@ pub const PrettyPrinter = struct {
 
                 return str.items;
             },
-            .Alias => |alias| return alias.name,
-            .Union => |un| {
+            .alias => |alias| return alias.name,
+            .union_of => |it| {
                 var str = try std.ArrayList(u8).initCapacity(self.allocator, 0);
-                try str.print(self.allocator, "{s}", .{try self._prettyPrint(un[0], level)});
+                try str.print(self.allocator, "{s}", .{try self._prettyPrint(it[0], level)});
 
-                if (un.len > 0) {
-                    for (un[1..]) |item| {
+                if (it.len > 0) {
+                    for (it[1..]) |item| {
                         try str.print(self.allocator, " | {s}", .{try self._prettyPrint(item, level)});
                     }
                 }
 
                 return str.items;
             },
-            .Variant => |it| {
+            .variant => |variant| {
                 var str = try std.ArrayList(u8).initCapacity(self.allocator, 0);
 
                 if (level >= 6)
                     try str.print(self.allocator, "(", .{});
-                try str.print(self.allocator, "{s}", .{it.name});
+                try str.print(self.allocator, "{s}", .{variant.name});
 
-                if (it.payload) |payload| {
+                if (variant.payload) |payload| {
                     try str.print(self.allocator, " of {s}", .{try self._prettyPrint(payload, 6)});
                 }
 
@@ -365,871 +365,871 @@ pub const PrettyPrinter = struct {
 
 fn makeFreshType(self: *TypeChecker) !*Type {
     return self.allocator.create(Type) catch {
-        return TypeError.OUT_OF_MEMORY;
+        return TypeError.OutOfMemory;
     };
 }
 
 fn makeFreshTypeSpecific(self: *TypeChecker, tp: Type) !*Type {
-    const freshType = self.allocator.create(Type) catch {
-        return TypeError.OUT_OF_MEMORY;
+    const fresh_type = self.allocator.create(Type) catch {
+        return TypeError.OutOfMemory;
     };
-    freshType.* = tp;
+    fresh_type.* = tp;
 
-    return freshType;
+    return fresh_type;
 }
 
 fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeError!*Type {
     switch (expression.*) {
-        .Unit => {
-            return try self.makeFreshTypeSpecific(.Unit);
+        .unit => {
+            return try self.makeFreshTypeSpecific(.unit);
         },
-        .Number => {
-            const freshType = try self.makeFreshType();
-            if (std.mem.containsAtLeast(u8, expression.Number, 1, ".")) {
-                freshType.* = .Float;
+        .number => {
+            const fresh_type = try self.makeFreshType();
+            if (std.mem.containsAtLeast(u8, expression.number, 1, ".")) {
+                fresh_type.* = .float;
             } else {
-                freshType.* = .Int;
+                fresh_type.* = .int;
             }
 
-            return freshType;
+            return fresh_type;
         },
-        .Import => |filePath| {
-            if (self.sharedContext) |sc| {
+        .import => |filePath| {
+            if (self.shared_context) |sc| {
                 const ret = sc.get(filePath) catch {
-                    return TypeError.IMPORT_FILE_NOT_FOUND;
+                    return TypeError.ImportFileNotFound;
                 };
-                return ret.type orelse return TypeError.IMPORT_FILE_NOT_FOUND;
+                return ret.type orelse return TypeError.ImportFileNotFound;
             } else {
-                return TypeError.ENVIRONMENT_INITALIZATION_ERROR;
+                return TypeError.EnvironmentInitializationError;
             }
         },
-        .Constructor => |constructor| {
-            var masterPayload: ?*Type = null;
-            if (scope.getType(constructor.name)) |typeDefinition| {
-                if (typeDefinition.* != .Variant) return TypeError.EXPECTED_CONSTRUCTOR;
+        .constructor => |constructor| {
+            var master_payload: ?*Type = null;
+            if (scope.getType(constructor.name)) |type_definition| {
+                if (type_definition.* != .variant) return TypeError.ExpectedConstructor;
 
-                if (typeDefinition.Variant.payload) |payload| {
+                if (type_definition.variant.payload) |payload| {
                     if (constructor.payload) |exprPayload| {
-                        const inferredType = try self._inferType(exprPayload, scope);
-                        try self.unifyTypes(payload, inferredType);
+                        const inferred_type = try self._inferType(exprPayload, scope);
+                        try self.unifyTypes(payload, inferred_type);
 
-                        masterPayload = payload;
-                    } else return TypeError.MISSING_CONSTRUCTOR_PAYLOAD;
+                        master_payload = payload;
+                    } else return TypeError.MissingConstructorPayload;
                 } else {
                     if (constructor.payload) |_| {
-                        return TypeError.UNEXPECTED_CONSTRUCTOR_PAYLOAD;
+                        return TypeError.UnexpectedConstructorPayload;
                     }
-                    masterPayload = null;
+                    master_payload = null;
                 }
-                return typeDefinition.Variant.parentUnion orelse return TypeError.CANNOT_UNIFY;
+                return type_definition.variant.parent_union orelse return TypeError.CannotUnify;
             }
-            return TypeError.UNBOUND_CONSTRUCTOR;
+            return TypeError.UnboundConstructor;
         },
-        .Boolean => return {
-            const freshType = try self.makeFreshType();
-            freshType.* = .Boolean;
-            return freshType;
+        .boolean => return {
+            const fresh_type = try self.makeFreshType();
+            fresh_type.* = .boolean;
+            return fresh_type;
         },
-        .String => {
-            const freshType = try self.makeFreshType();
-            freshType.* = .String;
-            return freshType;
+        .string => {
+            const fresh_type = try self.makeFreshType();
+            fresh_type.* = .string;
+            return fresh_type;
         },
-        .Tuple => |expressions| {
-            var types = std.ArrayList(*Type).initCapacity(self.allocator, expressions.len) catch return TypeError.OUT_OF_MEMORY;
+        .tuple => |expressions| {
+            var types = std.ArrayList(*Type).initCapacity(self.allocator, expressions.len) catch return TypeError.OutOfMemory;
 
             for (expressions) |expr| {
-                types.append(self.allocator, try self._inferType(expr, scope)) catch return TypeError.OUT_OF_MEMORY;
+                types.append(self.allocator, try self._inferType(expr, scope)) catch return TypeError.OutOfMemory;
             }
 
-            return try self.makeFreshTypeSpecific(.{ .Tuple = types.items });
+            return try self.makeFreshTypeSpecific(.{ .tuple = types.items });
         },
-        .Not => |not| {
-            const freshType = try self.makeFreshType();
+        .not => |not| {
+            const fresh_type = try self.makeFreshType();
             const tp = try self._inferType(not, scope);
 
-            const booleanType = try self.makeFreshTypeSpecific(.Boolean);
-            self.unifyTypes(tp, booleanType) catch {
-                self.errorContext = .{
-                    .UNEXPECTED_TYPE = .{
-                        .expectedType = self.allocator.dupe(*Type, &[_]*Type{
-                            try self.makeFreshTypeSpecific(.Boolean),
+            const boolean_type = try self.makeFreshTypeSpecific(.boolean);
+            self.unifyTypes(tp, boolean_type) catch {
+                self.error_context = .{
+                    .unexpected_type = .{
+                        .expected_type = self.allocator.dupe(*Type, &[_]*Type{
+                            try self.makeFreshTypeSpecific(.boolean),
                         }) catch {
-                            return TypeError.OUT_OF_MEMORY;
+                            return TypeError.OutOfMemory;
                         },
-                        .foundType = tp,
+                        .found_type = tp,
                         .context = expression,
                     },
                 };
-                return TypeError.UNEXPECTED_TYPE;
+                return TypeError.UnexpectedType;
             };
 
-            freshType.* = .Boolean;
-            return freshType;
+            fresh_type.* = .boolean;
+            return fresh_type;
         },
-        .UnaryMinus => |unaryMinus| {
+        .unary_minus => |unaryMinus| {
             const tp = try self._inferType(unaryMinus, scope);
 
-            const intType = try self.makeFreshTypeSpecific(.Int);
-            const floatType = try self.makeFreshTypeSpecific(.Float);
+            const int_type = try self.makeFreshTypeSpecific(.int);
+            const float_type = try self.makeFreshTypeSpecific(.float);
 
-            self.unifyTypes(tp, intType) catch {
-                self.unifyTypes(tp, floatType) catch {
-                    self.errorContext = .{
-                        .UNEXPECTED_TYPE = .{
-                            .expectedType = self.allocator.dupe(*Type, &[_]*Type{
-                                intType,
-                                floatType,
+            self.unifyTypes(tp, int_type) catch {
+                self.unifyTypes(tp, float_type) catch {
+                    self.error_context = .{
+                        .unexpected_type = .{
+                            .expected_type = self.allocator.dupe(*Type, &[_]*Type{
+                                int_type,
+                                float_type,
                             }) catch {
-                                return TypeError.OUT_OF_MEMORY;
+                                return TypeError.OutOfMemory;
                             },
-                            .foundType = tp,
+                            .found_type = tp,
                             .context = expression,
                         },
                     };
-                    return TypeError.UNEXPECTED_TYPE;
+                    return TypeError.UnexpectedType;
                 };
             };
 
             return tp;
         },
-        .Variable => |v| {
+        .variable => |v| {
             const tp = scope.getValue(v);
 
             if (tp) |val| return self.applySubstitutions(val);
-            self.errorContext = .{
-                .UNBOUND_VARIABLE = .{
+            self.error_context = .{
+                .unbound_variable = .{
                     .variable = v,
                 },
             };
-            return TypeError.UNBOUND_VARIABLE;
+            return TypeError.UnboundVariable;
         },
-        .Application => |app| {
-            const calleeType = self.applySubstitutions(try self._inferType(app.callee, scope));
+        .application => |app| {
+            const callee_type = self.applySubstitutions(try self._inferType(app.callee, scope));
 
-            const _argType = try self.freshWildcard();
-            const _returnType = try self.freshWildcard();
+            const arg_type = try self.freshWildcard();
+            const return_type = try self.freshWildcard();
 
-            const lambdaType = try self.makeFreshTypeSpecific(.{ .Lambda = .{
-                .argType = _argType,
-                .returnType = _returnType,
+            const lambdaType = try self.makeFreshTypeSpecific(.{ .lambda = .{
+                .argument = arg_type,
+                .returns = return_type,
             } });
 
-            self.unifyTypes(calleeType, lambdaType) catch {
-                self.errorContext = TypeErrorContext{
-                    .UNEXPECTED_TYPE = .{
-                        .expectedType = self.allocator.dupe(*Type, &[_]*Type{
+            self.unifyTypes(callee_type, lambdaType) catch {
+                self.error_context = TypeErrorContext{
+                    .unexpected_type = .{
+                        .expected_type = self.allocator.dupe(*Type, &[_]*Type{
                             lambdaType,
                         }) catch {
-                            return TypeError.OUT_OF_MEMORY;
+                            return TypeError.OutOfMemory;
                         },
-                        .foundType = calleeType,
+                        .found_type = callee_type,
                         .context = app.callee,
                     },
                 };
 
-                return TypeError.UNEXPECTED_TYPE;
+                return TypeError.UnexpectedType;
             };
 
-            const valueType = try self._inferType(app.value, scope);
+            const value_type = try self._inferType(app.value, scope);
 
-            self.unifyTypes(valueType, _argType) catch {
-                self.errorContext = TypeErrorContext{
-                    .UNEXPECTED_TYPE = .{
-                        .expectedType = self.allocator.dupe(*Type, &[_]*Type{_argType}) catch {
-                            return TypeError.OUT_OF_MEMORY;
+            self.unifyTypes(value_type, arg_type) catch {
+                self.error_context = TypeErrorContext{
+                    .unexpected_type = .{
+                        .expected_type = self.allocator.dupe(*Type, &[_]*Type{arg_type}) catch {
+                            return TypeError.OutOfMemory;
                         },
-                        .foundType = valueType,
+                        .found_type = value_type,
                         .context = app.value,
                     },
                 };
 
-                return TypeError.UNEXPECTED_TYPE;
+                return TypeError.UnexpectedType;
             };
 
-            return _returnType;
+            return return_type;
         },
-        .BinaryOperation => |bop| {
-            const rawLeft = try self._inferType(bop.left, scope);
-            const rawRight = try self._inferType(bop.right, scope);
+        .binary_operation => |bop| {
+            const raw_left = try self._inferType(bop.left, scope);
+            const raw_right = try self._inferType(bop.right, scope);
 
-            const leftType = self.applySubstitutions(rawLeft);
-            const rightType = self.applySubstitutions(rawRight);
+            const left_type = self.applySubstitutions(raw_left);
+            const right_type = self.applySubstitutions(raw_right);
 
             return switch (bop.operation) {
-                .ADD, .SUBTRACT, .DIVIDE, .MULTIPLY, .GT, .GTEQ, .LT, .LTEQ => {
-                    const intType = try self.makeFreshTypeSpecific(.Int);
-                    const floatType = try self.makeFreshTypeSpecific(.Float);
-                    const stringType = try self.makeFreshTypeSpecific(.String);
+                .add, .subtract, .divide, .multiply, .gt, .gt_eq, .lt, .lt_eq => {
+                    const int_type = try self.makeFreshTypeSpecific(.int);
+                    const float_type = try self.makeFreshTypeSpecific(.float);
+                    const string_type = try self.makeFreshTypeSpecific(.string);
 
-                    self.unifyTypes(leftType, intType) catch {
-                        self.unifyTypes(leftType, floatType) catch {
-                            if (bop.operation == .ADD) {
-                                self.unifyTypes(leftType, stringType) catch {};
+                    self.unifyTypes(left_type, int_type) catch {
+                        self.unifyTypes(left_type, float_type) catch {
+                            if (bop.operation == .add) {
+                                self.unifyTypes(left_type, string_type) catch {};
                             }
                         };
                     };
 
-                    const resolvedLeftType = self.applySubstitutions(leftType);
+                    const resolved_left_type = self.applySubstitutions(left_type);
 
-                    if (resolvedLeftType.* != .Int and resolvedLeftType.* != .Float and (resolvedLeftType.* != .String or bop.operation != .ADD)) {
-                        self.errorContext = TypeErrorContext{
-                            .UNEXPECTED_TYPE = .{
-                                .expectedType = self.allocator.dupe(*Type, if (bop.operation == .ADD) &[_]*Type{
-                                    intType,
-                                    floatType,
-                                    stringType,
-                                } else &[_]*Type{ intType, floatType }) catch return TypeError.OUT_OF_MEMORY,
-                                .foundType = leftType,
+                    if (resolved_left_type.* != .int and resolved_left_type.* != .float and (resolved_left_type.* != .string or bop.operation != .add)) {
+                        self.error_context = TypeErrorContext{
+                            .unexpected_type = .{
+                                .expected_type = self.allocator.dupe(*Type, if (bop.operation == .add) &[_]*Type{
+                                    int_type,
+                                    float_type,
+                                    string_type,
+                                } else &[_]*Type{ int_type, float_type }) catch return TypeError.OutOfMemory,
+                                .found_type = left_type,
                                 .context = bop.left,
                             },
                         };
 
-                        return TypeError.UNEXPECTED_TYPE;
+                        return TypeError.UnexpectedType;
                     }
 
-                    self.unifyTypes(rightType, leftType) catch {
-                        self.errorContext = TypeErrorContext{
-                            .UNEXPECTED_TYPE = .{
-                                .expectedType = self.allocator.dupe(*Type, &[_]*Type{
-                                    leftType,
-                                }) catch return TypeError.OUT_OF_MEMORY,
-                                .foundType = rightType,
+                    self.unifyTypes(right_type, left_type) catch {
+                        self.error_context = TypeErrorContext{
+                            .unexpected_type = .{
+                                .expected_type = self.allocator.dupe(*Type, &[_]*Type{
+                                    left_type,
+                                }) catch return TypeError.OutOfMemory,
+                                .found_type = right_type,
                                 .context = bop.right,
                             },
                         };
 
-                        return TypeError.UNEXPECTED_TYPE;
+                        return TypeError.UnexpectedType;
                     };
 
                     // TODO: Type promotion
 
-                    // if (leftType.* == .Float) {
-                    //     rightType.* = .Float;
+                    // if (left_type.* == .Float) {
+                    //     right_type.* = .Float;
                     // }
 
-                    // if (rightType.* == .Float) {
-                    //     leftType.* = .Float;
+                    // if (right_type.* == .Float) {
+                    //     left_type.* = .Float;
                     // }
 
-                    // Now leftType is the .Int type
-                    // return leftType;
+                    // Now left_type is the .Int type
+                    // return left_type;
 
-                    if (bop.operation == .GT or bop.operation == .GTEQ or bop.operation == .LT or bop.operation == .LTEQ) {
-                        const freshType = try self.makeFreshTypeSpecific(.Boolean);
-                        return freshType;
+                    if (bop.operation == .gt or bop.operation == .gt_eq or bop.operation == .lt or bop.operation == .lt_eq) {
+                        const fresh_type = try self.makeFreshTypeSpecific(.boolean);
+                        return fresh_type;
                     }
-                    return leftType;
+                    return left_type;
                 },
 
-                .EQEQ, .NOTEQEQ, .EQ, .NOTEQ => {
-                    try self.unifyTypes(leftType, rightType);
+                .eq_eq, .not_eq_eq, .eq, .not_eq => {
+                    try self.unifyTypes(left_type, right_type);
 
-                    if (leftType.* != .Boolean and leftType.* != .Float and leftType.* != .Int and leftType.* != .String) {
-                        self.errorContext = TypeErrorContext{
-                            .UNEXPECTED_TYPE = .{
-                                .expectedType = self.allocator.dupe(*Type, &[_]*Type{
-                                    try self.makeFreshTypeSpecific(.Boolean),
-                                    try self.makeFreshTypeSpecific(.Float),
-                                    try self.makeFreshTypeSpecific(.Int),
-                                    try self.makeFreshTypeSpecific(.String),
+                    if (left_type.* != .boolean and left_type.* != .float and left_type.* != .int and left_type.* != .string) {
+                        self.error_context = TypeErrorContext{
+                            .unexpected_type = .{
+                                .expected_type = self.allocator.dupe(*Type, &[_]*Type{
+                                    try self.makeFreshTypeSpecific(.boolean),
+                                    try self.makeFreshTypeSpecific(.float),
+                                    try self.makeFreshTypeSpecific(.int),
+                                    try self.makeFreshTypeSpecific(.string),
                                 }) catch {
-                                    return TypeError.OUT_OF_MEMORY;
+                                    return TypeError.OutOfMemory;
                                 },
-                                .foundType = leftType,
+                                .found_type = left_type,
                                 .context = expression,
                             },
                         };
-                        return TypeError.UNEXPECTED_TYPE;
+                        return TypeError.UnexpectedType;
                     }
 
-                    const freshType = try self.makeFreshType();
-                    freshType.* = .Boolean;
+                    const fresh_type = try self.makeFreshType();
+                    fresh_type.* = .boolean;
 
-                    return freshType;
+                    return fresh_type;
                 },
 
-                .AND, .OR => {
-                    const freshType = try self.makeFreshType();
-                    freshType.* = .Boolean;
-                    self.unifyTypes(leftType, freshType) catch {
-                        self.errorContext = TypeErrorContext{
-                            .UNEXPECTED_TYPE = .{
-                                .expectedType = self.allocator.dupe(*Type, &[_]*Type{freshType}) catch {
-                                    return TypeError.OUT_OF_MEMORY;
+                .and_op, .or_op => {
+                    const fresh_type = try self.makeFreshType();
+                    fresh_type.* = .boolean;
+                    self.unifyTypes(left_type, fresh_type) catch {
+                        self.error_context = TypeErrorContext{
+                            .unexpected_type = .{
+                                .expected_type = self.allocator.dupe(*Type, &[_]*Type{fresh_type}) catch {
+                                    return TypeError.OutOfMemory;
                                 },
-                                .foundType = leftType,
+                                .found_type = left_type,
                                 .context = expression,
                             },
                         };
-                        return TypeError.UNEXPECTED_TYPE;
+                        return TypeError.UnexpectedType;
                     };
-                    self.unifyTypes(rightType, freshType) catch {
-                        self.errorContext = TypeErrorContext{
-                            .UNEXPECTED_TYPE = .{
-                                .expectedType = self.allocator.dupe(*Type, &[_]*Type{freshType}) catch {
-                                    return TypeError.OUT_OF_MEMORY;
+                    self.unifyTypes(right_type, fresh_type) catch {
+                        self.error_context = TypeErrorContext{
+                            .unexpected_type = .{
+                                .expected_type = self.allocator.dupe(*Type, &[_]*Type{fresh_type}) catch {
+                                    return TypeError.OutOfMemory;
                                 },
-                                .foundType = rightType,
+                                .found_type = right_type,
                                 .context = expression,
                             },
                         };
-                        return TypeError.UNEXPECTED_TYPE;
+                        return TypeError.UnexpectedType;
                     };
 
-                    return leftType;
+                    return left_type;
                 },
 
                 // TODO: Type promotion
-                // .EQ, .NOTEQ => {
+                // .eq, .not_eq => {
                 // },
             };
         },
-        .Condition => |cond| {
-            const conditionType = try self._inferType(cond.expression, scope);
-            var booleanType = Type{ .Boolean = {} };
-            self.unifyTypes(conditionType, &booleanType) catch {
-                self.errorContext = TypeErrorContext{ .UNEXPECTED_TYPE = .{
-                    .expectedType = self.allocator.dupe(*Type, &[_]*Type{
-                        try self.makeFreshTypeSpecific(.Boolean),
+        .condition => |cond| {
+            const condition_type = try self._inferType(cond.expression, scope);
+            var boolean_type = Type{ .boolean = {} };
+            self.unifyTypes(condition_type, &boolean_type) catch {
+                self.error_context = TypeErrorContext{ .unexpected_type = .{
+                    .expected_type = self.allocator.dupe(*Type, &[_]*Type{
+                        try self.makeFreshTypeSpecific(.boolean),
                     }) catch {
-                        return TypeError.OUT_OF_MEMORY;
+                        return TypeError.OutOfMemory;
                     },
-                    .foundType = conditionType,
+                    .found_type = condition_type,
                     .context = expression,
                 } };
-                return TypeError.UNEXPECTED_TYPE;
+                return TypeError.UnexpectedType;
             };
-            const satisfyType = try self._inferType(cond.satisfyBlock, scope);
-            const elseType = try self._inferType(cond.elseBlock, scope);
+            const satisfy_type = try self._inferType(cond.satisfy_block, scope);
+            const else_type = try self._inferType(cond.else_block, scope);
 
-            self.unifyTypes(satisfyType, elseType) catch {
-                self.errorContext = TypeErrorContext{ .UNEXPECTED_TYPE = .{
-                    .expectedType = self.allocator.dupe(*Type, &[_]*Type{
-                        satisfyType,
+            self.unifyTypes(satisfy_type, else_type) catch {
+                self.error_context = TypeErrorContext{ .unexpected_type = .{
+                    .expected_type = self.allocator.dupe(*Type, &[_]*Type{
+                        satisfy_type,
                     }) catch {
-                        return TypeError.OUT_OF_MEMORY;
+                        return TypeError.OutOfMemory;
                     },
-                    .foundType = elseType,
-                    .context = cond.elseBlock,
+                    .found_type = else_type,
+                    .context = cond.else_block,
                 } };
-                return TypeError.UNEXPECTED_TYPE;
+                return TypeError.UnexpectedType;
             };
 
-            return satisfyType;
+            return satisfy_type;
         },
-        .Declaration => |decl| {
-            const blockEnvironment = try self.freshEnvironment(scope);
+        .declaration => |decl| {
+            const block_scope = try self.freshScope(scope);
 
             const identifier = try self.reallocateIdentifier(decl.identifier);
 
-            var explicitTypeOptional: ?*Type = null;
+            var explicit_type_optional: ?*Type = null;
 
-            if (decl.explicitType) |explicitTypeAst| {
-                explicitTypeOptional = try self.parseTypeAst(explicitTypeAst.*, scope);
+            if (decl.explicit_type) |explicitTypeAst| {
+                explicit_type_optional = try self.parseTypeAst(explicitTypeAst.*, scope);
             }
             if (decl.identifier[0] == '@') {
-                const identType = try self.freshWildcard();
-                try blockEnvironment.addValue(identifier, identType);
-                const expressionType = try self._inferType(decl.expression, blockEnvironment);
+                const ident_type = try self.freshWildcard();
+                try block_scope.addValue(identifier, ident_type);
+                const expression_type = try self._inferType(decl.expression, block_scope);
 
-                if (explicitTypeOptional) |explicitType| {
-                    self.unifyTypes(identType, explicitType) catch {
-                        self.errorContext = TypeErrorContext{ .UNEXPECTED_TYPE = .{
+                if (explicit_type_optional) |explicit_type| {
+                    self.unifyTypes(ident_type, explicit_type) catch {
+                        self.error_context = TypeErrorContext{ .unexpected_type = .{
                             .context = decl.expression,
-                            .expectedType = self.allocator.dupe(*Type, &[_]*Type{
-                                explicitType,
-                            }) catch return TypeError.OUT_OF_MEMORY,
-                            .foundType = identType,
+                            .expected_type = self.allocator.dupe(*Type, &[_]*Type{
+                                explicit_type,
+                            }) catch return TypeError.OutOfMemory,
+                            .found_type = ident_type,
                         } };
-                        return TypeError.UNEXPECTED_TYPE;
+                        return TypeError.UnexpectedType;
                     };
                 }
 
-                try self.unifyTypes(identType, expressionType);
+                try self.unifyTypes(ident_type, expression_type);
 
-                return try self._inferType(decl.block, blockEnvironment);
+                return try self._inferType(decl.block, block_scope);
             } else {
-                const expressionType = try self._inferType(decl.expression, scope);
+                const expression_type = try self._inferType(decl.expression, scope);
 
-                if (explicitTypeOptional) |explicitType| {
-                    self.unifyTypes(expressionType, explicitType) catch {
-                        self.errorContext = TypeErrorContext{ .UNEXPECTED_TYPE = .{
+                if (explicit_type_optional) |explicitType| {
+                    self.unifyTypes(expression_type, explicitType) catch {
+                        self.error_context = TypeErrorContext{ .unexpected_type = .{
                             .context = decl.expression,
-                            .expectedType = self.allocator.dupe(*Type, &[_]*Type{
+                            .expected_type = self.allocator.dupe(*Type, &[_]*Type{
                                 explicitType,
-                            }) catch return TypeError.OUT_OF_MEMORY,
-                            .foundType = expressionType,
+                            }) catch return TypeError.OutOfMemory,
+                            .found_type = expression_type,
                         } };
-                        return TypeError.UNEXPECTED_TYPE;
+                        return TypeError.UnexpectedType;
                     };
                 }
 
-                try blockEnvironment.addValue(identifier, expressionType);
+                try block_scope.addValue(identifier, expression_type);
 
-                return try self._inferType(decl.block, blockEnvironment);
+                return try self._inferType(decl.block, block_scope);
             }
         },
-        .TypeDeclaration => |decl| {
-            const blockEnvironment = try self.freshEnvironment(scope);
+        .type_declaration => |decl| {
+            const block_scope = try self.freshScope(scope);
 
             const identifier = try self.reallocateIdentifier(decl.identifier);
 
-            const identType = try self.makeFreshTypeSpecific(.{ .Alias = .{
+            const ident_type = try self.makeFreshTypeSpecific(.{ .alias = .{
                 .name = identifier,
                 .underlying = try self.freshWildcard(),
             } });
-            try blockEnvironment.addType(identifier, identType);
+            try block_scope.addType(identifier, ident_type);
 
-            var explicitType: ?*Type = null;
-            if (decl.typesAst.len == 1) {
-                explicitType = try self.parseTypeAst(decl.typesAst[0].*, blockEnvironment);
+            var explicit_type: ?*Type = null;
+            if (decl.types_ast.len == 1) {
+                explicit_type = try self.parseTypeAst(decl.types_ast[0].*, block_scope);
 
-                if (explicitType.?.* == .Variant) {
-                    explicitType.?.Variant.parentUnion = identType;
-                    try blockEnvironment.addType(explicitType.?.Variant.name, explicitType.?);
+                if (explicit_type.?.* == .variant) {
+                    explicit_type.?.variant.parent_union = ident_type;
+                    try block_scope.addType(explicit_type.?.variant.name, explicit_type.?);
                 }
             } else {
-                var types = std.ArrayList(*Type).initCapacity(self.allocator, decl.typesAst.len) catch return TypeError.OUT_OF_MEMORY;
-                var usedIdentifiers = std.StringHashMap(void).init(self.allocator);
-                defer usedIdentifiers.deinit();
+                var types = std.ArrayList(*Type).initCapacity(self.allocator, decl.types_ast.len) catch return TypeError.OutOfMemory;
+                var exhausted_identifiers = std.StringHashMap(void).init(self.allocator);
+                defer exhausted_identifiers.deinit();
 
-                for (decl.typesAst) |typeAst| {
-                    if (typeAst.* != .Constructor) return TypeError.EXPECTED_CONSTRUCTOR;
+                for (decl.types_ast) |typeAst| {
+                    if (typeAst.* != .constructor) return TypeError.ExpectedConstructor;
 
-                    if (usedIdentifiers.get(typeAst.Constructor.name)) |_| {
-                        return TypeError.CONSTRUCTOR_NAME_REPEATED;
+                    if (exhausted_identifiers.get(typeAst.constructor.name)) |_| {
+                        return TypeError.DuplicatedConstructor;
                     }
-                    const parsedType = try self.parseTypeAst(typeAst.*, blockEnvironment);
+                    const parsed_type = try self.parseTypeAst(typeAst.*, block_scope);
 
-                    if (parsedType.* == .Variant) {
-                        parsedType.Variant.parentUnion = identType;
+                    if (parsed_type.* == .variant) {
+                        parsed_type.variant.parent_union = ident_type;
                     }
 
-                    usedIdentifiers.put(parsedType.Variant.name, {}) catch return TypeError.OUT_OF_MEMORY;
+                    exhausted_identifiers.put(parsed_type.variant.name, {}) catch return TypeError.OutOfMemory;
 
                     types.append(
                         self.allocator,
-                        parsedType,
-                    ) catch return TypeError.OUT_OF_MEMORY;
+                        parsed_type,
+                    ) catch return TypeError.OutOfMemory;
 
-                    try blockEnvironment.addType(parsedType.Variant.name, parsedType);
+                    try block_scope.addType(parsed_type.variant.name, parsed_type);
                 }
 
-                explicitType = try self.makeFreshTypeSpecific(.{ .Union = types.items });
+                explicit_type = try self.makeFreshTypeSpecific(.{ .union_of = types.items });
             }
-            identType.Alias.underlying = explicitType.?;
+            ident_type.alias.underlying = explicit_type.?;
 
-            return try self._inferType(decl.block, blockEnvironment);
+            return try self._inferType(decl.block, block_scope);
         },
-        .Lambda => |lam| {
-            const closureEnvironment = try self.freshEnvironment(scope);
-            const argumentType = try self.freshWildcard();
-            try closureEnvironment.addValue(lam.identifier, argumentType);
+        .lambda => |lam| {
+            const closure_environment = try self.freshScope(scope);
+            const argument_type = try self.freshWildcard();
+            try closure_environment.addValue(lam.identifier, argument_type);
 
-            if (expression.*.Lambda.explicitArgumentType) |explicitTypeAst| {
-                const explicitType = try self.parseTypeAst(explicitTypeAst.*, scope);
-                try self.unifyTypes(explicitType, argumentType);
+            if (expression.*.lambda.explicit_argument_type) |explicitTypeAst| {
+                const explicit_type = try self.parseTypeAst(explicitTypeAst.*, scope);
+                try self.unifyTypes(explicit_type, argument_type);
             }
 
-            const bodyType = try self._inferType(lam.block, closureEnvironment);
+            const body_type = try self._inferType(lam.block, closure_environment);
 
-            const lambdaType = try self.makeFreshTypeSpecific(.{ .Lambda = .{
-                .argType = argumentType,
-                .returnType = bodyType,
+            const lambda_type = try self.makeFreshTypeSpecific(.{ .lambda = .{
+                .argument = argument_type,
+                .returns = body_type,
             } });
 
-            expression.*.Lambda.inferredType = lambdaType;
+            expression.*.lambda.inferred_type = lambda_type;
 
-            return lambdaType;
+            return lambda_type;
         },
-        .Match => |match| {
-            const scrutineeTp = try self._inferType(match.scrutinee, scope);
+        .match => |match| {
+            const scrutinee_type = try self._inferType(match.scrutinee, scope);
 
-            if (match.explicitScrutineeType) |explicitScrutineeTypeAst| {
-                const parsedScrutineeType = try self.parseTypeAst(explicitScrutineeTypeAst.*, scope);
-                try self.unifyTypes(scrutineeTp, parsedScrutineeType);
+            if (match.explicit_scrutinee_type) |explicit_scrutinee_type| {
+                const parsed_scrutinee_type = try self.parseTypeAst(explicit_scrutinee_type.*, scope);
+                try self.unifyTypes(scrutinee_type, parsed_scrutinee_type);
             }
 
-            var caseTypes = std.ArrayList(*Type).initCapacity(self.allocator, match.cases.len) catch return TypeError.OUT_OF_MEMORY;
-            var hasWildcard = false;
+            var case_types = std.ArrayList(*Type).initCapacity(self.allocator, match.cases.len) catch return TypeError.OutOfMemory;
+            var has_wildcard = false;
 
-            var seenConstructors = std.StringHashMap(void).init(self.allocator);
-            defer seenConstructors.deinit();
+            var seen_constructors = std.StringHashMap(void).init(self.allocator);
+            defer seen_constructors.deinit();
 
             for (match.cases) |case| {
-                const freshEnv = try self.freshEnvironment(scope);
-                const patternTp = try self.inferPattern(freshEnv, case.pattern.*);
+                const fresh_scope = try self.freshScope(scope);
+                const pattern_tp = try self.inferPattern(fresh_scope, case.pattern.*);
 
-                self.unifyTypes(scrutineeTp, patternTp) catch {
-                    return TypeError.UNMATCHED_PATTERN;
+                self.unifyTypes(scrutinee_type, pattern_tp) catch {
+                    return TypeError.UnmatchedPattern;
                 };
 
                 switch (case.pattern.*) {
-                    .Constructor => |c| {
-                        seenConstructors.put(c.name, {}) catch return TypeError.OUT_OF_MEMORY;
+                    .constructor => |c| {
+                        seen_constructors.put(c.name, {}) catch return TypeError.OutOfMemory;
                     },
-                    .Wildcard, .Identifier => {
-                        hasWildcard = true;
+                    .wildcard, .identifier => {
+                        has_wildcard = true;
                     },
                     else => {},
                 }
 
-                caseTypes.append(self.allocator, try self._inferType(case.block, freshEnv)) catch return TypeError.OUT_OF_MEMORY;
+                case_types.append(self.allocator, try self._inferType(case.block, fresh_scope)) catch return TypeError.OutOfMemory;
             }
 
-            if (caseTypes.items.len == 0) return TypeError.MISSING_MATCH_CASE;
+            if (case_types.items.len == 0) return TypeError.MissingMatchCase;
 
-            var resolvedScrutinee = self.applySubstitutions(scrutineeTp);
-            if (resolvedScrutinee.* == .Alias) {
-                resolvedScrutinee = self.applySubstitutions(resolvedScrutinee.Alias.underlying);
+            var resolved_scrutinee = self.applySubstitutions(scrutinee_type);
+            if (resolved_scrutinee.* == .alias) {
+                resolved_scrutinee = self.applySubstitutions(resolved_scrutinee.alias.underlying);
             }
 
-            if (resolvedScrutinee.* == .Union and !hasWildcard) {
-                for (resolvedScrutinee.Union) |variant| {
-                    if (!seenConstructors.contains(variant.Variant.name)) {
+            if (resolved_scrutinee.* == .union_of and !has_wildcard) {
+                for (resolved_scrutinee.union_of) |variant| {
+                    if (!seen_constructors.contains(variant.variant.name)) {
                         // std.debug.print("Missing match case for: {s}\n", .{variant.Variant.name});
-                        return TypeError.MISSING_MATCH_CASE;
+                        return TypeError.MissingMatchCase;
                     }
                 }
             }
 
-            const firstTp = caseTypes.items[0];
-            if (caseTypes.items.len > 1) {
-                for (caseTypes.items[1..], 1..) |caseTp, i| {
-                    self.unifyTypes(firstTp, caseTp) catch {
-                        self.errorContext = TypeErrorContext{
-                            .UNEXPECTED_TYPE = .{
-                                .expectedType = self.allocator.dupe(*Type, &[_]*Type{firstTp}) catch return TypeError.OUT_OF_MEMORY,
-                                .foundType = caseTp,
+            const first_tp = case_types.items[0];
+            if (case_types.items.len > 1) {
+                for (case_types.items[1..], 1..) |caseTp, i| {
+                    self.unifyTypes(first_tp, caseTp) catch {
+                        self.error_context = TypeErrorContext{
+                            .unexpected_type = .{
+                                .expected_type = self.allocator.dupe(*Type, &[_]*Type{first_tp}) catch return TypeError.OutOfMemory,
+                                .found_type = caseTp,
                                 .context = match.cases[i].block,
                             },
                         };
-                        return TypeError.UNEXPECTED_TYPE;
+                        return TypeError.UnexpectedType;
                     };
                 }
             }
 
-            return firstTp;
+            return first_tp;
         },
-        .MemberAccess => |memberAccess| {
-            const objectType = self.applySubstitutions(try self._inferType(memberAccess.object, scope));
+        .member_access => |member_access| {
+            const object_type = self.applySubstitutions(try self._inferType(member_access.object, scope));
 
-            if (objectType.* != .Scope) return TypeError.MEMBER_ACCESS_ON_NON_ENVIRONMENT;
+            if (object_type.* != .scope) return TypeError.MemberAccessOnNonEnvrionment;
 
-            const memberType = objectType.Scope.getValue(memberAccess.member);
+            const member_type = object_type.scope.getValue(member_access.member);
 
-            if (memberType) |memberTp| {
+            if (member_type) |memberTp| {
                 var cache = std.AutoHashMap(usize, *Type).init(self.allocator);
                 defer cache.deinit();
                 return try self.freshenType(memberTp, &cache);
             }
 
-            return TypeError.PROPERTY_NOT_FOUND_ON_OBJECT;
+            return TypeError.PropertyNotFoundOnObject;
         },
-        .Module => |module| {
-            const moduleEnvironment = try self.freshEnvironment(scope);
+        .module => |module| {
+            const module_scope = try self.freshScope(scope);
 
-            const tp = try self._inferType(module.block, moduleEnvironment);
+            const tp = try self._inferType(module.block, module_scope);
 
-            if (tp.* != .Scope) return TypeError.EXPECTED_ENVIRONMENT_TYPE_ON_MODULE_END;
+            if (tp.* != .scope) return TypeError.ExpectedEnvironmentTypeOnModuleEnd;
 
             if (scope.getValue(module.identifier)) |_| {
-                return TypeError.SHADOWING_BY_MODULE_NOT_ALLOWED;
+                return TypeError.ShadowingByModuleNotAllowed;
             }
 
-            try scope.addValue(module.identifier, try self.makeFreshTypeSpecific(.{ .Scope = tp.Scope }));
+            try scope.addValue(module.identifier, try self.makeFreshTypeSpecific(.{ .scope = tp.scope }));
 
             return try self._inferType(module.rest, scope);
         },
-        .CurrentEnvironment => {
-            return try self.makeFreshTypeSpecific(.{ .Scope = scope });
+        .current_environment => {
+            return try self.makeFreshTypeSpecific(.{ .scope = scope });
         },
-        .UseEnvironment => |env| {
-            const typeEnv = try self._inferType(env.environment, scope);
-            if (typeEnv.* != .Scope) return TypeError.EXPECTED_ENVIRONMENT_ON_ENV_EXPANSION;
+        .use_environment => |env| {
+            const type_scope = try self._inferType(env.environment, scope);
+            if (type_scope.* != .scope) return TypeError.ExpectedEnvironmentOnEnvExpansion;
 
-            var tempScope = try self.freshEnvironment(scope);
+            var temp_scope = try self.freshScope(scope);
             var cache = std.AutoHashMap(usize, *Type).init(self.allocator);
             defer cache.deinit();
 
-            var values = std.ArrayList(std.StringHashMap(*Type).Entry).initCapacity(self.allocator, 0) catch return TypeError.OUT_OF_MEMORY;
-            var types = std.ArrayList(std.StringHashMap(*Type).Entry).initCapacity(self.allocator, 0) catch return TypeError.OUT_OF_MEMORY;
+            var values = std.ArrayList(std.StringHashMap(*Type).Entry).initCapacity(self.allocator, 0) catch return TypeError.OutOfMemory;
+            var types = std.ArrayList(std.StringHashMap(*Type).Entry).initCapacity(self.allocator, 0) catch return TypeError.OutOfMemory;
 
-            var currentScope: ?*Scope = typeEnv.Scope;
-            while (currentScope) |curr| {
-                var valuesIterator = curr.values.iterator();
+            var current_scope: ?*Scope = type_scope.scope;
+            while (current_scope) |curr| {
+                var values_iterator = curr.values.iterator();
 
-                while (valuesIterator.next()) |entry| {
-                    values.insert(self.allocator, 0, entry) catch return TypeError.OUT_OF_MEMORY;
+                while (values_iterator.next()) |entry| {
+                    values.insert(self.allocator, 0, entry) catch return TypeError.OutOfMemory;
                 }
 
-                var typesIterator = curr.types.iterator();
+                var types_iterator = curr.types.iterator();
 
-                while (typesIterator.next()) |entry| {
-                    types.insert(self.allocator, 0, entry) catch return TypeError.OUT_OF_MEMORY;
+                while (types_iterator.next()) |entry| {
+                    types.insert(self.allocator, 0, entry) catch return TypeError.OutOfMemory;
                 }
-                currentScope = curr.parent;
+                current_scope = curr.parent;
             }
 
             for (values.items) |entry| {
-                const freshVal = try self.freshenType(entry.value_ptr.*, &cache);
-                try tempScope.addValue(entry.key_ptr.*, freshVal);
+                const fresh_val = try self.freshenType(entry.value_ptr.*, &cache);
+                try temp_scope.addValue(entry.key_ptr.*, fresh_val);
             }
 
             for (types.items) |entry| {
-                const freshType = try self.freshenType(entry.value_ptr.*, &cache);
-                try tempScope.addType(entry.key_ptr.*, freshType);
+                const fresh_tp = try self.freshenType(entry.value_ptr.*, &cache);
+                try temp_scope.addType(entry.key_ptr.*, fresh_tp);
             }
 
-            return try self._inferType(env.block, tempScope);
+            return try self._inferType(env.block, temp_scope);
         },
-        .TypeAscription => |env| {
-            const inferredType = try self._inferType(env.expression, scope);
+        .type_ascription => |env| {
+            const inferred_type = try self._inferType(env.expression, scope);
 
-            const parsedType = try self.parseTypeAst(env.explicitType.*, scope);
+            const parsed_type = try self.parseTypeAst(env.explicit_type.*, scope);
 
-            try self.unifyTypes(inferredType, parsedType);
+            try self.unifyTypes(inferred_type, parsed_type);
 
-            return parsedType;
+            return parsed_type;
         },
     }
 }
 
-fn parseTypeAst(self: *TypeChecker, typeAst: TypeAst, environment: *Scope) TypeError!*Type {
-    return switch (typeAst) {
-        .Wildcard => try self.freshWildcard(),
-        .Identifier => |ident| {
-            if (environment.getType(ident)) |identifier| return identifier;
+fn parseTypeAst(self: *TypeChecker, type_ast: TypeAst, scope: *Scope) TypeError!*Type {
+    return switch (type_ast) {
+        .wildcard => try self.freshWildcard(),
+        .identifier => |ident| {
+            if (scope.getType(ident)) |identifier| return identifier;
             if (ident[0] == '\'') {
-                const newWildcard = try self.freshWildcard();
+                const new_wildcard = try self.freshWildcard();
 
-                try environment.addType(ident, newWildcard);
+                try scope.addType(ident, new_wildcard);
 
-                return newWildcard;
+                return new_wildcard;
             }
-            return TypeError.UNBOUND_TYPE;
+            return TypeError.UnboundType;
         },
-        .Tuple => |tupleElements| {
-            var elements = std.ArrayList(*Type).initCapacity(self.allocator, 1) catch return TypeError.OUT_OF_MEMORY;
+        .tuple => |tuple| {
+            var elements = std.ArrayList(*Type).initCapacity(self.allocator, 1) catch return TypeError.OutOfMemory;
 
-            for (tupleElements) |elem| {
-                elements.append(self.allocator, try self.parseTypeAst(elem.*, environment)) catch return TypeError.OUT_OF_MEMORY;
+            for (tuple) |it| {
+                elements.append(self.allocator, try self.parseTypeAst(it.*, scope)) catch return TypeError.OutOfMemory;
             }
 
-            return try self.makeFreshTypeSpecific(.{ .Tuple = elements.items });
+            return try self.makeFreshTypeSpecific(.{ .tuple = elements.items });
         },
-        .Function => |fun| {
-            return self.makeFreshTypeSpecific(.{ .Lambda = .{
-                .argType = try self.parseTypeAst(fun.argument.*, environment),
-                .returnType = try self.parseTypeAst(fun.returnType.*, environment),
+        .function => |function| {
+            return self.makeFreshTypeSpecific(.{ .lambda = .{
+                .argument = try self.parseTypeAst(function.argument.*, scope),
+                .returns = try self.parseTypeAst(function.returns.*, scope),
             } });
         },
-        .Constructor => |constructor| {
-            return self.makeFreshTypeSpecific(.{ .Variant = .{
+        .constructor => |constructor| {
+            return self.makeFreshTypeSpecific(.{ .variant = .{
                 .name = try self.reallocateIdentifier(constructor.name),
-                .payload = if (constructor.payload) |payload| try self.parseTypeAst(payload.*, environment) else null,
-                .parentUnion = null,
+                .payload = if (constructor.payload) |payload| try self.parseTypeAst(payload.*, scope) else null,
+                .parent_union = null,
             } });
         },
     };
 }
 
 fn reallocateIdentifier(self: *TypeChecker, str: []const u8) TypeError![]const u8 {
-    if (self.sharedContext) |sharedCtx| {
-        return sharedCtx.allocator.dupe(u8, str) catch return TypeError.OUT_OF_MEMORY;
+    if (self.shared_context) |sharedCtx| {
+        return sharedCtx.allocator.dupe(u8, str) catch return TypeError.OutOfMemory;
     }
     return str;
 }
 
-fn inferPattern(self: *TypeChecker, environment: *Scope, pattern: MatchPattern) TypeError!*Type {
+fn inferPattern(self: *TypeChecker, scope: *Scope, pattern: MatchPattern) TypeError!*Type {
     return switch (pattern) {
-        .Wildcard => self.freshWildcard(),
-        .Identifier => |ident| {
-            const freshType = try self.freshWildcard();
-            try environment.addValue(ident, freshType);
-            return freshType;
+        .wildcard => self.freshWildcard(),
+        .identifier => |ident| {
+            const fresh_type = try self.freshWildcard();
+            try scope.addValue(ident, fresh_type);
+            return fresh_type;
         },
-        .Tuple => |tup| {
-            var types = std.ArrayList(*Type).initCapacity(self.allocator, tup.binds.len) catch return TypeError.OUT_OF_MEMORY;
-            for (tup.binds) |pat| {
-                types.append(self.allocator, try self.inferPattern(environment, pat.*)) catch return TypeError.OUT_OF_MEMORY;
+        .tuple => |tuple| {
+            var types = std.ArrayList(*Type).initCapacity(self.allocator, tuple.binds.len) catch return TypeError.OutOfMemory;
+            for (tuple.binds) |pat| {
+                types.append(self.allocator, try self.inferPattern(scope, pat.*)) catch return TypeError.OutOfMemory;
             }
-            return try self.makeFreshTypeSpecific(.{ .Tuple = types.items });
+            return try self.makeFreshTypeSpecific(.{ .tuple = types.items });
         },
-        .Constructor => |constructor| {
-            const typeDef = environment.getType(constructor.name) orelse return TypeError.UNBOUND_CONSTRUCTOR;
-            if (typeDef.* != .Variant) return TypeError.EXPECTED_CONSTRUCTOR;
+        .constructor => |constructor| {
+            const type_def = scope.getType(constructor.name) orelse return TypeError.UnboundConstructor;
+            if (type_def.* != .variant) return TypeError.ExpectedConstructor;
 
-            if (typeDef.Variant.payload) |expectedPayload| {
+            if (type_def.variant.payload) |expectedPayload| {
                 if (constructor.payload) |actualPayloadAst| {
-                    const actualPayloadType = try self.inferPattern(environment, actualPayloadAst.*);
-                    try self.unifyTypes(expectedPayload, actualPayloadType);
+                    const actual_payload_type = try self.inferPattern(scope, actualPayloadAst.*);
+                    try self.unifyTypes(expectedPayload, actual_payload_type);
                 } else {
-                    return TypeError.MISSING_CONSTRUCTOR_PAYLOAD;
+                    return TypeError.MissingConstructorPayload;
                 }
             } else if (constructor.payload != null) {
-                return TypeError.UNEXPECTED_CONSTRUCTOR_PAYLOAD;
+                return TypeError.UnexpectedConstructorPayload;
             }
 
-            return typeDef.Variant.parentUnion orelse return TypeError.CANNOT_UNIFY;
+            return type_def.variant.parent_union orelse return TypeError.CannotUnify;
         },
-        .Cons => TypeError.UNIMPLEMENTED,
+        .cons => TypeError.Unimplemented,
     };
 }
 
 fn applySubstitutions(self: *TypeChecker, tp: *Type) *Type {
-    if (tp.* == .Wildcard)
-        if (self.substitutions.get(tp.Wildcard)) |resolvedType| {
-            const nestedType = self.applySubstitutions(resolvedType);
-            self.substitutions.put(tp.Wildcard, nestedType) catch {};
+    if (tp.* == .wildcard)
+        if (self.substitutions.get(tp.wildcard)) |resolvedType| {
+            const nested_type = self.applySubstitutions(resolvedType);
+            self.substitutions.put(tp.wildcard, nested_type) catch {};
 
-            return nestedType;
+            return nested_type;
         };
     return tp;
 }
 
-fn _occursInType(self: *TypeChecker, wildcardId: usize, tp: *Type, visited: *std.AutoHashMap(*Type, void)) bool {
+fn _occursInType(self: *TypeChecker, wildcard_id: usize, tp: *Type, visited: *std.AutoHashMap(*Type, void)) bool {
     const resolved = self.applySubstitutions(tp);
 
     if (visited.contains(resolved)) return false;
     visited.put(resolved, {}) catch {};
 
     switch (resolved.*) {
-        .Wildcard => |id| return id == wildcardId,
-        .Lambda => |lam| {
-            return self._occursInType(wildcardId, lam.argType, visited) or
-                self._occursInType(wildcardId, lam.returnType, visited);
+        .wildcard => |id| return id == wildcard_id,
+        .lambda => |lambda| {
+            return self._occursInType(wildcard_id, lambda.argument, visited) or
+                self._occursInType(wildcard_id, lambda.returns, visited);
         },
-        .Tuple => |types| {
-            for (types) |t| {
-                if (self._occursInType(wildcardId, t, visited)) return true;
+        .tuple => |tuple| {
+            for (tuple) |it| {
+                if (self._occursInType(wildcard_id, it, visited)) return true;
             }
             return false;
         },
-        .Scope => |env| {
-            var it = env.values.iterator();
+        .scope => |scope| {
+            var it = scope.values.iterator();
             while (it.next()) |entry| {
-                if (self._occursInType(wildcardId, entry.value_ptr.*, visited)) return true;
+                if (self._occursInType(wildcard_id, entry.value_ptr.*, visited)) return true;
             }
             return false;
         },
-        .Alias => |alias| {
-            return self._occursInType(wildcardId, alias.underlying, visited);
+        .alias => |alias| {
+            return self._occursInType(wildcard_id, alias.underlying, visited);
         },
         else => return false,
     }
 }
 
-fn occursInType(self: *TypeChecker, wildcardId: usize, tp: *Type) bool {
+fn occursInType(self: *TypeChecker, wildcard_id: usize, tp: *Type) bool {
     var visited = std.AutoHashMap(*Type, void).init(self.allocator);
     defer visited.deinit();
 
-    return self._occursInType(wildcardId, tp, &visited);
+    return self._occursInType(wildcard_id, tp, &visited);
 }
 
 fn freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Type)) TypeError!*Type {
     const resolved = self.applySubstitutions(tp);
     switch (resolved.*) {
-        .Wildcard => |id| {
+        .wildcard => |id| {
             if (cache.get(id)) |fresh| {
                 return fresh;
             }
-            const fresh = try self.freshWildcard();
-            cache.put(id, fresh) catch return TypeError.OUT_OF_MEMORY;
-            return fresh;
+            const fresh_wildcard = try self.freshWildcard();
+            cache.put(id, fresh_wildcard) catch return TypeError.OutOfMemory;
+            return fresh_wildcard;
         },
-        .Lambda => |lam| {
-            const freshArg = try self.freshenType(lam.argType, cache);
-            const freshRet = try self.freshenType(lam.returnType, cache);
-            return try self.makeFreshTypeSpecific(.{ .Lambda = .{ .argType = freshArg, .returnType = freshRet } });
+        .lambda => |lam| {
+            const fresh_argument = try self.freshenType(lam.argument, cache);
+            const fresh_returns = try self.freshenType(lam.returns, cache);
+            return try self.makeFreshTypeSpecific(.{ .lambda = .{ .argument = fresh_argument, .returns = fresh_returns } });
         },
-        .Tuple => |types| {
-            const freshTypes = self.allocator.alloc(*Type, types.len) catch return TypeError.OUT_OF_MEMORY;
-            for (types, 0..) |t, i| {
-                freshTypes[i] = try self.freshenType(t, cache);
+        .tuple => |tuple| {
+            const fresh_types = self.allocator.alloc(*Type, tuple.len) catch return TypeError.OutOfMemory;
+            for (tuple, 0..) |t, i| {
+                fresh_types[i] = try self.freshenType(t, cache);
             }
-            return try self.makeFreshTypeSpecific(.{ .Tuple = freshTypes });
+            return try self.makeFreshTypeSpecific(.{ .tuple = fresh_types });
         },
-        .Scope => |env| {
-            const freshEnv = try self.freshEnvironment(env.parent);
-            var itValues = env.values.iterator();
-            while (itValues.next()) |entry| {
-                const freshVal = try self.freshenType(entry.value_ptr.*, cache);
-                try freshEnv.addValue(entry.key_ptr.*, freshVal);
-            }
-
-            var itTypes = env.types.iterator();
-            while (itTypes.next()) |entry| {
-                const freshType = try self.freshenType(entry.value_ptr.*, cache);
-                try freshEnv.addType(entry.key_ptr.*, freshType);
+        .scope => |scope| {
+            const fresh_scope = try self.freshScope(scope.parent);
+            var it_values = scope.values.iterator();
+            while (it_values.next()) |entry| {
+                const fresh_val = try self.freshenType(entry.value_ptr.*, cache);
+                try fresh_scope.addValue(entry.key_ptr.*, fresh_val);
             }
 
-            return try self.makeFreshTypeSpecific(.{ .Scope = freshEnv });
+            var it_types = scope.types.iterator();
+            while (it_types.next()) |entry| {
+                const fresh_type = try self.freshenType(entry.value_ptr.*, cache);
+                try fresh_scope.addType(entry.key_ptr.*, fresh_type);
+            }
+
+            return try self.makeFreshTypeSpecific(.{ .scope = fresh_scope });
         },
-        .Alias => {
+        .alias => {
             return resolved;
         },
-        .Variant => |variant| {
-            return try self.makeFreshTypeSpecific(.{ .Variant = .{
+        .variant => |variant| {
+            return try self.makeFreshTypeSpecific(.{ .variant = .{
                 .name = variant.name,
                 .payload = if (variant.payload) |payload| try self.freshenType(payload, cache) else null,
-                .parentUnion = variant.parentUnion,
+                .parent_union = variant.parent_union,
             } });
         },
-        .Union => |un| {
-            const freshTypes = self.allocator.alloc(*Type, un.len) catch return TypeError.OUT_OF_MEMORY;
+        .union_of => |un| {
+            const fresh_types = self.allocator.alloc(*Type, un.len) catch return TypeError.OutOfMemory;
             for (un, 0..) |t, i| {
-                freshTypes[i] = try self.freshenType(t, cache);
+                fresh_types[i] = try self.freshenType(t, cache);
             }
-            return try self.makeFreshTypeSpecific(.{ .Union = freshTypes });
+            return try self.makeFreshTypeSpecific(.{ .union_of = fresh_types });
         },
         else => return resolved,
     }
 }
 
-fn unifyTypes(self: *TypeChecker, rawLeft: *Type, rawRight: *Type) TypeError!void {
-    const left = self.applySubstitutions(rawLeft);
-    const right = self.applySubstitutions(rawRight);
+fn unifyTypes(self: *TypeChecker, raw_left: *Type, raw_right: *Type) TypeError!void {
+    const left = self.applySubstitutions(raw_left);
+    const right = self.applySubstitutions(raw_right);
 
-    if (left == right or (left.* == .Wildcard and right.* == .Wildcard and left.Wildcard == right.Wildcard)) {
+    if (left == right or (left.* == .wildcard and right.* == .wildcard and left.wildcard == right.wildcard)) {
         return;
     }
 
-    if (left.* == .Wildcard) {
-        if (self.occursInType(left.Wildcard, right)) {
-            return TypeError.CANNOT_UNIFY;
+    if (left.* == .wildcard) {
+        if (self.occursInType(left.wildcard, right)) {
+            return TypeError.CannotUnify;
         }
-        self.substitutions.put(left.Wildcard, right) catch return TypeError.OUT_OF_MEMORY;
+        self.substitutions.put(left.wildcard, right) catch return TypeError.OutOfMemory;
         return;
     }
-    if (right.* == .Wildcard) {
-        if (self.occursInType(right.Wildcard, left)) {
-            return TypeError.CANNOT_UNIFY;
+    if (right.* == .wildcard) {
+        if (self.occursInType(right.wildcard, left)) {
+            return TypeError.CannotUnify;
         }
-        self.substitutions.put(right.Wildcard, left) catch return TypeError.OUT_OF_MEMORY;
+        self.substitutions.put(right.wildcard, left) catch return TypeError.OutOfMemory;
         return;
     }
 
-    if (left.* == .Alias and right.* == .Alias and std.mem.eql(u8, left.Alias.name, right.Alias.name)) {
+    if (left.* == .alias and right.* == .alias and std.mem.eql(u8, left.alias.name, right.alias.name)) {
         return;
     }
 
     if (std.meta.activeTag(left.*) != std.meta.activeTag(right.*)) {
-        return TypeError.CANNOT_UNIFY;
+        return TypeError.CannotUnify;
     }
 
     switch (left.*) {
-        .Lambda => {
-            try self.unifyTypes(left.Lambda.argType, right.Lambda.argType);
-            try self.unifyTypes(left.Lambda.returnType, right.Lambda.returnType);
+        .lambda => {
+            try self.unifyTypes(left.lambda.argument, right.lambda.argument);
+            try self.unifyTypes(left.lambda.returns, right.lambda.returns);
         },
-        .Tuple => |leftTypes| {
-            const rightTypes = right.Tuple;
-            if (leftTypes.len != rightTypes.len) {
-                return TypeError.CANNOT_UNIFY;
+        .tuple => |left_types| {
+            const right_types = right.tuple;
+            if (left_types.len != right_types.len) {
+                return TypeError.CannotUnify;
             }
-            for (leftTypes, rightTypes) |l, r| {
+            for (left_types, right_types) |l, r| {
                 try self.unifyTypes(l, r);
             }
         },

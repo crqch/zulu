@@ -4,6 +4,7 @@ const Io = std.Io;
 const argsParser = @import("args");
 const Repl = @import("./repl.zig");
 const zulu = @import("zulu");
+const readFileContents = zulu.readFileContents;
 const Options = zulu.Options;
 const Lexer = zulu.Lexer;
 const Parser = zulu.Parser;
@@ -40,28 +41,28 @@ pub fn main(init: std.process.Init) !void {
     run(init) catch |err| {
         const is_expected = inline for (.{
             error.NO_INPUT,
-            error.UNMATCHED_TOKEN,
-            error.UNTERMINATED_STRING_LITERAL,
-            error.EOF_NOT_REACHED,
-            error.EXPECTED_VARIABLE_AT_DECLARATION,
+            error.UnmatchedToken,
+            error.UnterminatedStringLiteral,
+            error.EofNotReached,
+            error.ExpectedVariableAtDeclaration,
             error.EXPECTED_LEFT_PARENTHESES,
             error.EXPECTED_RIGHT_PARENTHESES,
             error.EXPECTED_ELSE_KEYWORD,
-            error.LAMBDA_UNRESOLVED,
-            error.EXPECTED_EXPRESSION,
-            error.PARENTHESES_UNMATCHED,
-            error.UNKNOWN_ESCAPE_CHARACTER,
+            error.LambdaUnresolved,
+            error.ExpectedExpression,
+            error.ParanthesesUnmatched,
+            error.UnknownEscapeCharacter,
             error.EXPECTED_BOP,
             error.NOT_A_BINARY_OPERATION,
-            error.UNBOUND_VARIABLE,
-            error.UNEXPECTED_TYPE,
-            error.DIVISION_BY_ZERO,
-            error.FLOAT_PARSING_FAILED,
-            error.INT_PARSING_FAILED,
-            error.ENVIRONMENT_INITALIZATION_ERROR,
-            error.ENVIRONMENT_MAP_ERROR,
-            error.MEMORY_ALLOCATION_FAILED,
-            error.UNIMPLEMENTED,
+            error.UnboundVariable,
+            error.UnexpectedType,
+            error.DivisionByZero,
+            error.FloatParsingFailed,
+            error.IntParsingFailed,
+            error.EnvironmentInitializationError,
+            error.EnvironmentMapError,
+            error.MemoryAllocationFailed,
+            error.Unimplemented,
         }) |expected| {
             if (err == expected) break true;
         } else false;
@@ -87,18 +88,6 @@ fn printUsage() void {
     std.debug.print("  -P, --halt-parser      Stop after parser\n", .{});
     std.debug.print("  -t, --debug-type       Print typechecker output (final program's type)\n", .{});
     std.debug.print("  -T, --halt-type        Stop after typechecking\n", .{});
-}
-
-fn readFile(io: std.Io, arena: std.mem.Allocator, path: []const u8) ![]const u8 {
-    const file = try std.Io.Dir.cwd().openFile(io, path, .{});
-    defer file.close(io);
-
-    var fileReader = file.reader(io, &.{});
-
-    const maxFileSize = 1024 * 1024 * 10;
-    const contents = fileReader.interface.allocRemaining(arena, .limited(maxFileSize));
-
-    return contents;
 }
 
 fn run(init: std.process.Init) anyerror!void {
@@ -129,16 +118,16 @@ fn run(init: std.process.Init) anyerror!void {
         return;
     }
 
-    var sharedContext = SharedContext.init(arena, init.io, options.options) catch |err| {
+    var shared_context = SharedContext.init(arena, init.io, options.options) catch |err| {
         std.debug.print(ansi.bold ++ ansi.red ++ "Memory allocator error: " ++ ansi.reset ++ ansi.red ++ "Shared context hashmap allocation failed!" ++ ansi.reset, .{});
         return err;
     };
-    defer sharedContext.deinit();
+    defer shared_context.deinit();
 
     if (options.options.text) {
-        try sharedContext.loadSource(options.positionals[0]);
+        try shared_context.loadSource(options.positionals[0]);
     } else {
-        sharedContext.load(options.positionals[0]) catch |err| {
+        shared_context.load(options.positionals[0]) catch |err| {
             std.debug.print(ansi.bold ++ ansi.red ++ "Error: " ++ ansi.reset, .{});
             switch (err) {
                 error.FileNotFound => {
@@ -152,11 +141,11 @@ fn run(init: std.process.Init) anyerror!void {
         };
     }
 
-    const ret = try sharedContext.get(if (options.options.text) "_" else options.positionals[0]);
+    const ret = try shared_context.get(if (options.options.text) "_" else options.positionals[0]);
 
-    const printedValue = try Interpreter.printValue(arena, ret.value.?);
+    const printed_value = try Interpreter.printValue(arena, ret.value.?);
 
-    std.debug.print("{s}\n", .{printedValue});
+    std.debug.print("{s}\n", .{printed_value});
 
     if (false) return error.Unexpected;
 }

@@ -2,9 +2,9 @@
 ---
 Lambda ( x )
  Declaration ( y )
-  BinaryOperation( MULTIPLY )
+  BinaryOperation( multiply )
    Number( 10 )
    Variable( x )
-  BinaryOperation( ADD )
+  BinaryOperation( add )
    Variable( y )
    Variable( x )

@@ -2,4 +2,4 @@ type t =
     | Test
     | Test;
 ---
-CONSTRUCTOR_NAME_REPEATED
+DuplicatedConstructor

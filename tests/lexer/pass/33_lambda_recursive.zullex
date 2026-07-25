@@ -1,18 +1,18 @@
 @rec=[x; @rec (x + 1)];@rec 10
 ---
-IDENT ( @rec )
-EQ
-LBRA
-IDENT ( x )
-SEMICOLON
-IDENT ( @rec )
-LPAR
-IDENT ( x )
-PLUS
-NUMBER ( 1 )
-RPAR
-RBRA
-SEMICOLON
-IDENT ( @rec )
-NUMBER ( 10 )
-EOF
+ident ( @rec )
+eq
+lbra
+ident ( x )
+semicolon
+ident ( @rec )
+lpar
+ident ( x )
+plus
+number ( 1 )
+rpar
+rbra
+semicolon
+ident ( @rec )
+number ( 10 )
+eof

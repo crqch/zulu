@@ -1,8 +1,8 @@
 2 > true <= false
 ---
-NUMBER ( 2 )
-GT
-KW_TRUE
-LTEQ
-KW_FALSE
-EOF
+number ( 2 )
+gt
+kw_true
+lt_eq
+kw_false
+eof

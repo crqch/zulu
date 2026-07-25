@@ -1,5 +1,5 @@
 Some 2
 ---
-IDENT ( Some )
-NUMBER ( 2 )
-EOF
+ident ( Some )
+number ( 2 )
+eof

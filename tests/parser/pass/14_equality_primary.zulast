@@ -1,7 +1,7 @@
 2 = (4 == 8)
 ---
-BinaryOperation( EQ )
+BinaryOperation( eq )
  Number( 2 )
- BinaryOperation( EQEQ )
+ BinaryOperation( eq_eq )
   Number( 4 )
   Number( 8 )

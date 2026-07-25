@@ -2,6 +2,6 @@
 ---
 Lambda ( x )
  Lambda ( y )
-  BinaryOperation( MULTIPLY )
+  BinaryOperation( multiply )
    Variable( x )
    Variable( y )

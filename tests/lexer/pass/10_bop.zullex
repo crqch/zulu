@@ -1,6 +1,6 @@
 2 + 2
 ---
-NUMBER ( 2 )
-PLUS
-NUMBER ( 2 )
-EOF
+number ( 2 )
+plus
+number ( 2 )
+eof

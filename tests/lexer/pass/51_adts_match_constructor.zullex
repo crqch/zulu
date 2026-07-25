@@ -2,16 +2,16 @@ match Some 2
     | Some x => x
     | None => 0
 ---
-KW_MATCH
-IDENT ( Some )
-NUMBER ( 2 )
-PIPE
-IDENT ( Some )
-IDENT ( x )
-ARROW
-IDENT ( x )
-PIPE
-IDENT ( None )
-ARROW
-NUMBER ( 0 )
-EOF
+kw_match
+ident ( Some )
+number ( 2 )
+pipe
+ident ( Some )
+ident ( x )
+arrow
+ident ( x )
+pipe
+ident ( None )
+arrow
+number ( 0 )
+eof

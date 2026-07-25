@@ -8,13 +8,13 @@ const SharedContext = @import("./shared.zig");
 const readFileContents = @import("./root.zig").readFileContents;
 
 allocator: std.mem.Allocator,
-sharedContext: *SharedContext,
+shared_context: *SharedContext,
 last_expression: ?*Expression = null,
 
-pub fn init(allocator: std.mem.Allocator, sharedContext: *SharedContext) Interpreter {
+pub fn init(allocator: std.mem.Allocator, shared_context: *SharedContext) Interpreter {
     return Interpreter{
         .allocator = allocator,
-        .sharedContext = sharedContext,
+        .shared_context = shared_context,
         .last_expression = null,
     };
 }
@@ -26,7 +26,7 @@ const Env = struct {
 
     pub fn init(allocator: std.mem.Allocator, parent: ?*Env) !*Env {
         const env = allocator.create(Env) catch {
-            return InterpreterError.ENVIRONMENT_INITALIZATION_ERROR;
+            return InterpreterError.EnvironmentInitializationError;
         };
 
         env.* = Env{
@@ -40,7 +40,7 @@ const Env = struct {
 
     fn add(self: *Env, identifier: []const u8, value: *Value) !void {
         self.bindings.put(identifier, value) catch {
-            return InterpreterError.ENVIRONMENT_MAP_ERROR;
+            return InterpreterError.EnvironmentMapError;
         };
     }
 
@@ -66,50 +66,50 @@ const Env = struct {
 };
 
 const ValueType = enum {
-    Unit,
-    Boolean,
-    Float,
-    Integer,
-    String,
+    unit,
+    boolean,
+    float,
+    integer,
+    string,
 
-    Variant,
+    variant,
 
-    Closure,
+    closure,
 
-    Tuple,
-    Environment,
+    tuple,
+    environment,
 };
 
 pub const Value = union(ValueType) {
-    Unit,
+    unit,
 
-    Boolean: bool,
-    Float: f64,
-    Integer: i64,
-    String: []const u8,
+    boolean: bool,
+    float: f64,
+    integer: i64,
+    string: []const u8,
 
-    Variant: struct {
+    variant: struct {
         name: []const u8,
         payload: ?*Value,
     },
 
-    Closure: struct {
+    closure: struct {
         node: *Expression,
         env: *Env,
     },
 
-    Tuple: []*Value,
-    Environment: *Env,
+    tuple: []*Value,
+    environment: *Env,
 };
 
 pub fn printValue(allocator: std.mem.Allocator, value: *Value) ![]const u8 {
     return switch (value.*) {
-        .Unit => "unit",
-        .Boolean => if (value.Boolean) "true" else "false",
-        .Float => try std.fmt.allocPrint(allocator, "{d}", .{value.Float}),
-        .Integer => try std.fmt.allocPrint(allocator, "{d}", .{value.Integer}),
-        .String => try std.fmt.allocPrint(allocator, "\"{s}\"", .{value.String}),
-        .Tuple => |values| {
+        .unit => "unit",
+        .boolean => if (value.boolean) "true" else "false",
+        .float => try std.fmt.allocPrint(allocator, "{d}", .{value.float}),
+        .integer => try std.fmt.allocPrint(allocator, "{d}", .{value.integer}),
+        .string => try std.fmt.allocPrint(allocator, "\"{s}\"", .{value.string}),
+        .tuple => |values| {
             var str = try std.ArrayList(u8).initCapacity(allocator, 0);
 
             try str.print(allocator, "(", .{});
@@ -122,16 +122,16 @@ pub fn printValue(allocator: std.mem.Allocator, value: *Value) ![]const u8 {
 
             return str.items;
         },
-        .Closure => try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, value.Closure.node.Lambda.inferredType.?)}),
-        .Variant => {
-            if (value.Variant.payload) |payload| {
-                return try std.fmt.allocPrint(allocator, "{s} ({s})", .{ value.Variant.name, try printValue(allocator, payload) });
+        .closure => try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, value.closure.node.lambda.inferred_type.?)}),
+        .variant => {
+            if (value.variant.payload) |payload| {
+                return try std.fmt.allocPrint(allocator, "{s} ({s})", .{ value.variant.name, try printValue(allocator, payload) });
             } else {
-                return try std.fmt.allocPrint(allocator, "{s}", .{value.Variant.name});
+                return try std.fmt.allocPrint(allocator, "{s}", .{value.variant.name});
             }
         },
-        .Environment => |env| {
-            var str = std.ArrayList(u8).initCapacity(allocator, 0) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+        .environment => |env| {
+            var str = std.ArrayList(u8).initCapacity(allocator, 0) catch return InterpreterError.MemoryAllocationFailed;
 
             try str.print(allocator, "env {{\n", .{});
             var entries = try std.ArrayList(std.StringHashMap(*Value).Entry).initCapacity(allocator, 0);
@@ -141,7 +141,7 @@ pub fn printValue(allocator: std.mem.Allocator, value: *Value) ![]const u8 {
                 var iterator = curr.bindings.iterator();
 
                 while (iterator.next()) |entry| {
-                    entries.insert(allocator, 0, entry) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+                    entries.insert(allocator, 0, entry) catch return InterpreterError.MemoryAllocationFailed;
                 }
                 current_env = curr.parent;
             }
@@ -166,33 +166,33 @@ pub fn eval(self: *Interpreter, expression: *Expression) !*Value {
 fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) InterpreterError!*Value {
     self.last_expression = expression;
     switch (expression.*) {
-        .Unit => {
-            return try self.makeValue(.{ .Unit = {} });
+        .unit => {
+            return try self.makeValue(.{ .unit = {} });
         },
-        .Number => |num| {
-            const periodIndex = std.mem.find(u8, num, ".");
+        .number => |num| {
+            const period_index = std.mem.find(u8, num, ".");
 
-            if (periodIndex) |index| {
+            if (period_index) |index| {
                 if (index == 0) {
-                    expression.Number = std.fmt.allocPrint(self.allocator, "0{s}", .{num}) catch {
-                        return InterpreterError.MEMORY_ALLOCATION_FAILED;
+                    expression.number = std.fmt.allocPrint(self.allocator, "0{s}", .{num}) catch {
+                        return InterpreterError.MemoryAllocationFailed;
                     };
                 }
 
-                const float = std.fmt.parseFloat(f64, expression.Number) catch {
-                    return InterpreterError.FLOAT_PARSING_FAILED;
+                const float = std.fmt.parseFloat(f64, expression.number) catch {
+                    return InterpreterError.FloatParsingFailed;
                 };
-                return try self.makeValue(.{ .Float = float });
+                return try self.makeValue(.{ .float = float });
             }
 
             // TODO: Add other number bases
             const int = std.fmt.parseInt(i32, num, 10) catch {
-                return InterpreterError.INT_PARSING_FAILED;
+                return InterpreterError.IntParsingFailed;
             };
-            return try self.makeValue(.{ .Integer = int });
+            return try self.makeValue(.{ .integer = int });
         },
-        .Import => |filePath| {
-            const ret = self.sharedContext.get(filePath) catch {
+        .import => |file_path| {
+            const ret = self.shared_context.get(file_path) catch {
                 unreachable;
             };
 
@@ -201,340 +201,340 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             }
             unreachable;
         },
-        .String => |str| {
-            return try self.makeValue(.{ .String = str });
+        .string => |str| {
+            return try self.makeValue(.{ .string = str });
         },
-        .Boolean => |boolean| {
-            return try self.makeValue(.{ .Boolean = boolean });
+        .boolean => |boolean| {
+            return try self.makeValue(.{ .boolean = boolean });
         },
-        .Variable => |variable| {
+        .variable => |variable| {
             if (environment.get(variable)) |value| {
                 return value;
             }
             unreachable;
         },
-        .Constructor => |constructor| {
-            var evaluatedPayload: ?*Value = null;
+        .constructor => |constructor| {
+            var evaluated_payload: ?*Value = null;
 
             if (constructor.payload) |payload| {
-                evaluatedPayload = try self._eval(payload, environment);
+                evaluated_payload = try self._eval(payload, environment);
             }
 
             return try self.makeValue(.{
-                .Variant = .{
+                .variant = .{
                     .name = try self.reallocateIdentifier(constructor.name),
-                    .payload = evaluatedPayload,
+                    .payload = evaluated_payload,
                 },
             });
         },
-        .Tuple => |expressions| {
-            var values = std.ArrayList(*Value).initCapacity(self.allocator, expressions.len) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+        .tuple => |expressions| {
+            var values = std.ArrayList(*Value).initCapacity(self.allocator, expressions.len) catch return InterpreterError.MemoryAllocationFailed;
 
             for (expressions) |ex| {
-                values.append(self.allocator, try self._eval(ex, environment)) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+                values.append(self.allocator, try self._eval(ex, environment)) catch return InterpreterError.MemoryAllocationFailed;
             }
 
             return try self.makeValue(.{
-                .Tuple = values.items,
+                .tuple = values.items,
             });
         },
-        .Lambda => {
+        .lambda => {
             return try self.makeValue(.{
-                .Closure = .{
+                .closure = .{
                     .node = expression,
                     .env = environment,
                 },
             });
         },
-        .Not => |not| {
+        .not => |not| {
             const notValue = try self._eval(not, environment);
 
             return try self.makeValue(.{
-                .Boolean = !notValue.Boolean,
+                .boolean = !notValue.boolean,
             });
         },
-        .UnaryMinus => |unaryMinus| {
-            const notValue = try self._eval(unaryMinus, environment);
+        .unary_minus => |unary_minus| {
+            const not_value = try self._eval(unary_minus, environment);
 
-            if (notValue.* == .Float) {
+            if (not_value.* == .float) {
                 return try self.makeValue(.{
-                    .Float = notValue.Float * -1,
+                    .float = not_value.float * -1,
                 });
             } else {
                 return try self.makeValue(.{
-                    .Integer = notValue.Integer * -1,
+                    .integer = not_value.integer * -1,
                 });
             }
         },
-        .Declaration => |declaration| {
-            var blockEnvironment = try Env.init(self.allocator, environment);
+        .declaration => |declaration| {
+            var block_environment = try Env.init(self.allocator, environment);
 
             const identifier = try self.reallocateIdentifier(declaration.identifier);
-            const evaluatedExpression = try self._eval(declaration.expression, if (declaration.identifier[0] == '@') blockEnvironment else environment);
+            const evaluated_expression = try self._eval(declaration.expression, if (declaration.identifier[0] == '@') block_environment else environment);
 
-            try blockEnvironment.add(identifier, evaluatedExpression);
+            try block_environment.add(identifier, evaluated_expression);
 
-            return try self._eval(declaration.block, blockEnvironment);
+            return try self._eval(declaration.block, block_environment);
         },
-        .TypeDeclaration => |declaration| {
+        .type_declaration => |declaration| {
             return try self._eval(declaration.block, environment);
         },
-        .Application => |application| {
-            const evaluatedCallee = try self._eval(application.callee, environment);
-            const evaluatedValue = try self._eval(application.value, environment);
+        .application => |application| {
+            const evaluated_callee = try self._eval(application.callee, environment);
+            const evaluated_value = try self._eval(application.value, environment);
 
-            const closure = evaluatedCallee.Closure;
-            const closureEnvironment = try Env.init(self.allocator, closure.env);
+            const closure = evaluated_callee.closure;
+            const closure_environment = try Env.init(self.allocator, closure.env);
 
-            try closureEnvironment.add(closure.node.Lambda.identifier, evaluatedValue);
+            try closure_environment.add(closure.node.lambda.identifier, evaluated_value);
 
-            return try self._eval(closure.node.Lambda.block, closureEnvironment);
+            return try self._eval(closure.node.lambda.block, closure_environment);
         },
-        .Condition => |condition| {
-            const conditionExpression = try self._eval(condition.expression, environment);
+        .condition => |condition| {
+            const condition_expression = try self._eval(condition.expression, environment);
 
-            if (conditionExpression.Boolean) {
-                return try self._eval(condition.satisfyBlock, environment);
+            if (condition_expression.boolean) {
+                return try self._eval(condition.satisfy_block, environment);
             } else {
-                return try self._eval(condition.elseBlock, environment);
+                return try self._eval(condition.else_block, environment);
             }
         },
-        .BinaryOperation => |bop| {
+        .binary_operation => |bop| {
             const left = try self._eval(bop.left, environment);
             const right = try self._eval(bop.right, environment);
 
             return switch (bop.operation) {
-                Bop.ADD, Bop.SUBTRACT, Bop.DIVIDE, Bop.MULTIPLY => {
+                Bop.add, Bop.subtract, Bop.divide, Bop.multiply => {
                     return try self.makeValue(switch (left.*) {
-                        .Integer => .{ .Integer = try numericOperation(i64, left.Integer, right.Integer, bop.operation) },
-                        .Float => .{ .Float = try numericOperation(f64, left.Float, right.Float, bop.operation) },
-                        .String => .{ .String = std.fmt.allocPrint(self.allocator, "{s}{s}", .{ left.String, right.String }) catch return InterpreterError.MEMORY_ALLOCATION_FAILED },
+                        .integer => .{ .integer = try numericOperation(i64, left.integer, right.integer, bop.operation) },
+                        .float => .{ .float = try numericOperation(f64, left.float, right.float, bop.operation) },
+                        .string => .{ .string = std.fmt.allocPrint(self.allocator, "{s}{s}", .{ left.string, right.string }) catch return InterpreterError.MemoryAllocationFailed },
                         else => unreachable,
                     });
                 },
-                Bop.NOTEQ => {
-                    expression.*.BinaryOperation.operation = Bop.EQ;
+                Bop.not_eq => {
+                    expression.*.binary_operation.operation = Bop.eq;
 
-                    const negatedValue = try self._eval(expression, environment);
-
-                    return try self.makeValue(.{
-                        .Boolean = !negatedValue.Boolean,
-                    });
-                },
-                Bop.NOTEQEQ => {
-                    expression.*.BinaryOperation.operation = Bop.EQEQ;
-
-                    const negatedValue = try self._eval(expression, environment);
+                    const negated_value = try self._eval(expression, environment);
 
                     return try self.makeValue(.{
-                        .Boolean = !negatedValue.Boolean,
+                        .boolean = !negated_value.boolean,
                     });
                 },
-                Bop.EQ, // This is a WIP for checking equality over the same type
-                Bop.EQEQ,
+                Bop.not_eq_eq => {
+                    expression.*.binary_operation.operation = Bop.eq_eq;
+
+                    const negated_value = try self._eval(expression, environment);
+
+                    return try self.makeValue(.{
+                        .boolean = !negated_value.boolean,
+                    });
+                },
+                Bop.eq, // This is a WIP for checking equality over the same type
+                Bop.eq_eq,
                 => {
                     switch (left.*) {
-                        ValueType.Boolean => {
+                        ValueType.boolean => {
                             return try self.makeValue(.{
-                                .Boolean = left.Boolean == right.Boolean,
+                                .boolean = left.boolean == right.boolean,
                             });
                         },
-                        ValueType.Float => {
-                            if (right.* != .Float) return try self.makeValue(.{
-                                .Boolean = false,
+                        ValueType.float => {
+                            if (right.* != .float) return try self.makeValue(.{
+                                .boolean = false,
                             });
                             return try self.makeValue(.{
-                                .Boolean = left.Float == right.Float,
+                                .boolean = left.float == right.float,
                             });
                         },
-                        ValueType.Integer => {
-                            if (right.* != .Integer) return try self.makeValue(.{
-                                .Boolean = false,
+                        ValueType.integer => {
+                            if (right.* != .integer) return try self.makeValue(.{
+                                .boolean = false,
                             });
                             return try self.makeValue(.{
-                                .Boolean = left.Integer == right.Integer,
+                                .boolean = left.integer == right.integer,
                             });
                         },
-                        ValueType.String => {
-                            const eql = std.mem.eql(u8, left.String, right.String);
+                        ValueType.string => {
+                            const eql = std.mem.eql(u8, left.string, right.string);
 
-                            return try self.makeValue(.{ .Boolean = eql });
+                            return try self.makeValue(.{ .boolean = eql });
                         },
                         else => unreachable,
                     }
                 },
-                Bop.GT, Bop.GTEQ, Bop.LT, Bop.LTEQ => {
+                Bop.gt, Bop.gt_eq, Bop.lt, Bop.lt_eq => {
                     return try self.makeValue(switch (left.*) {
-                        .Integer => .{ .Boolean = try numericComparison(i64, left.Integer, right.Integer, bop.operation) },
-                        .Float => .{ .Boolean = try numericComparison(f64, left.Float, right.Float, bop.operation) },
+                        .integer => .{ .boolean = try numericComparison(i64, left.integer, right.integer, bop.operation) },
+                        .float => .{ .boolean = try numericComparison(f64, left.float, right.float, bop.operation) },
                         else => unreachable,
                     });
                 },
-                Bop.AND, Bop.OR => {
+                Bop.and_op, Bop.or_op => {
                     return try self.makeValue(switch (bop.operation) {
-                        Bop.AND => .{ .Boolean = left.Boolean and right.Boolean },
-                        Bop.OR => .{ .Boolean = left.Boolean or right.Boolean },
+                        Bop.and_op => .{ .boolean = left.boolean and right.boolean },
+                        Bop.or_op => .{ .boolean = left.boolean or right.boolean },
                         else => unreachable,
                     });
                 },
             };
         },
-        .Match => |match| {
+        .match => |match| {
             const value = try self._eval(match.scrutinee, environment);
 
             for (match.cases) |case| {
                 if (try self.matchesPattern(case.pattern.*, value)) {
-                    const freshEnv = try Env.init(self.allocator, environment);
-                    try self.expandEnvByPattern(freshEnv, case.pattern.*, value);
-                    return try self._eval(case.block, freshEnv);
+                    const fresh_env = try Env.init(self.allocator, environment);
+                    try self.expandEnvByPattern(fresh_env, case.pattern.*, value);
+                    return try self._eval(case.block, fresh_env);
                 }
             }
 
             unreachable;
         },
-        .CurrentEnvironment => {
+        .current_environment => {
             return try self.makeValue(.{
-                .Environment = environment,
+                .environment = environment,
             });
         },
-        .UseEnvironment => |env| {
-            const evaluatedEnv = try self._eval(env.environment, environment);
+        .use_environment => |env| {
+            const evaluated_env = try self._eval(env.environment, environment);
 
             var temp_env = try Env.init(self.allocator, environment);
-            var it = evaluatedEnv.Environment.bindings.iterator();
+            var it = evaluated_env.environment.bindings.iterator();
             while (it.next()) |entry| {
                 try temp_env.add(entry.key_ptr.*, entry.value_ptr.*);
             }
 
             return try self._eval(env.block, temp_env);
         },
-        .MemberAccess => |memberAccess| {
-            const objectValue = try self._eval(memberAccess.object, environment);
+        .member_access => |member_access| {
+            const object_value = try self._eval(member_access.object, environment);
 
-            const memberValue = objectValue.Environment.get(memberAccess.member);
+            const member_value = object_value.environment.get(member_access.member);
 
-            if (memberValue) |val| return val;
+            if (member_value) |val| return val;
             unreachable;
         },
-        .Module => |mod| {
-            const moduleEnvironment = try Env.init(self.allocator, environment);
+        .module => |mod| {
+            const module_environment = try Env.init(self.allocator, environment);
 
-            const value = try self._eval(mod.block, moduleEnvironment);
+            const value = try self._eval(mod.block, module_environment);
 
             try environment.add(mod.identifier, try self.makeValue(.{
-                .Environment = value.Environment,
+                .environment = value.environment,
             }));
 
             return self._eval(mod.rest, environment);
         },
-        .TypeAscription => |typeAscription| {
-            return self._eval(typeAscription.expression, environment);
+        .type_ascription => |type_ascription| {
+            return self._eval(type_ascription.expression, environment);
         },
     }
 }
 
 fn reallocateIdentifier(self: *Interpreter, str: []const u8) InterpreterError![]const u8 {
-    return self.sharedContext.allocator.dupe(u8, str) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+    return self.shared_context.allocator.dupe(u8, str) catch return InterpreterError.MemoryAllocationFailed;
 }
 
 fn makeValue(self: *Interpreter, value: Value) InterpreterError!*Value {
-    const freshValue = self.allocator.create(Value) catch return InterpreterError.MEMORY_ALLOCATION_FAILED;
+    const fresh_value = self.allocator.create(Value) catch return InterpreterError.MemoryAllocationFailed;
 
-    freshValue.* = value;
+    fresh_value.* = value;
 
-    return freshValue;
+    return fresh_value;
 }
 
 fn expandEnvByPattern(self: *Interpreter, environment: *Env, pattern: MatchPattern, value: *Value) InterpreterError!void {
     return switch (pattern) {
-        .Cons => |cons| {
+        .cons => |cons| {
             _ = cons;
-            return InterpreterError.UNIMPLEMENTED;
+            return InterpreterError.Unimplemented;
         },
-        .Tuple => |idents| {
-            if (value.* != .Tuple or value.Tuple.len != idents.binds.len) return InterpreterError.UNMATCHED_PATTERN;
-            for (idents.binds, value.Tuple) |pat, val| {
+        .tuple => |idents| {
+            if (value.* != .tuple or value.tuple.len != idents.binds.len) return InterpreterError.UnmatchedPattern;
+            for (idents.binds, value.tuple) |pat, val| {
                 try self.expandEnvByPattern(environment, pat.*, val);
             }
         },
-        .Identifier => |ident| {
+        .identifier => |ident| {
             try environment.add(ident, value);
         },
-        .Constructor => |constructor| {
+        .constructor => |constructor| {
             if (constructor.payload) |payload| {
-                return try self.expandEnvByPattern(environment, payload.*, value.Variant.payload.?);
+                return try self.expandEnvByPattern(environment, payload.*, value.variant.payload.?);
             }
         },
-        .Wildcard => {},
+        .wildcard => {},
     };
 }
 
 fn matchesPattern(self: *Interpreter, pattern: MatchPattern, value: *Value) InterpreterError!bool {
     return switch (pattern) {
-        .Cons => |cons| {
+        .cons => |cons| {
             _ = cons;
-            return InterpreterError.UNIMPLEMENTED;
+            return InterpreterError.Unimplemented;
         },
-        .Tuple => |idents| {
-            if (value.* != .Tuple or value.Tuple.len != idents.binds.len) return false;
-            for (idents.binds, value.Tuple) |pat, val| {
+        .tuple => |idents| {
+            if (value.* != .tuple or value.tuple.len != idents.binds.len) return false;
+            for (idents.binds, value.tuple) |pat, val| {
                 if (!try self.matchesPattern(pat.*, val)) return false;
             }
             return true;
         },
-        .Constructor => |constructor| {
-            if (value.* != .Variant or !std.mem.eql(u8, value.Variant.name, constructor.name)) return false;
+        .constructor => |constructor| {
+            if (value.* != .variant or !std.mem.eql(u8, value.variant.name, constructor.name)) return false;
 
             if (constructor.payload) |constructorPayload| {
-                if (value.Variant.payload) |variantPayload| {
+                if (value.variant.payload) |variantPayload| {
                     return try self.matchesPattern(constructorPayload.*, variantPayload);
                 }
                 return false;
             }
-            return value.Variant.payload == null;
+            return value.variant.payload == null;
         },
-        .Identifier, .Wildcard => true,
+        .identifier, .wildcard => true,
     };
 }
 
-const InterpreterError = error{
-    FLOAT_PARSING_FAILED,
-    INT_PARSING_FAILED,
+pub const InterpreterError = error{
+    FloatParsingFailed,
+    IntParsingFailed,
 
-    MEMORY_ALLOCATION_FAILED,
+    MemoryAllocationFailed,
 
-    DIVISION_BY_ZERO,
+    DivisionByZero,
 
-    ENVIRONMENT_MAP_ERROR,
-    ENVIRONMENT_INITALIZATION_ERROR,
+    EnvironmentMapError,
+    EnvironmentInitializationError,
 
-    UNMATCHED_PATTERN,
+    UnmatchedPattern,
 
-    UNIMPLEMENTED,
+    Unimplemented,
 };
 
 fn numericOperation(comptime T: type, left: T, right: T, operation: Bop) InterpreterError!T {
     return switch (operation) {
-        .ADD => {
+        .add => {
             if (T == i64) {
                 return left +| right;
             }
             return left + right;
         },
-        .SUBTRACT => {
+        .subtract => {
             if (T == i64) {
                 return left -| right;
             }
             return left - right;
         },
-        .DIVIDE => {
-            if (right == 0) return InterpreterError.DIVISION_BY_ZERO;
+        .divide => {
+            if (right == 0) return InterpreterError.DivisionByZero;
             if (T == i64) {
                 return @divFloor(left, right);
             }
             return left / right;
         },
-        .MULTIPLY => {
+        .multiply => {
             if (T == i64) {
                 return left *| right;
             }
@@ -546,10 +546,10 @@ fn numericOperation(comptime T: type, left: T, right: T, operation: Bop) Interpr
 
 fn numericComparison(comptime T: type, left: T, right: T, operation: Bop) InterpreterError!bool {
     return switch (operation) {
-        .GT => left > right,
-        .GTEQ => left >= right,
-        .LT => left < right,
-        .LTEQ => left <= right,
+        .gt => left > right,
+        .gt_eq => left >= right,
+        .lt => left < right,
+        .lt_eq => left <= right,
         else => unreachable,
     };
 }

@@ -43,19 +43,19 @@ pub fn deinit(self: *SharedContext) void {
     self.pipeline.deinit();
 }
 
-pub fn load(self: *SharedContext, filePath: []const u8) !void {
-    const absolutePath = try std.Io.Dir.cwd().realPathFileAlloc(self.io, filePath, self.allocator);
-    if (self.bindings.get(absolutePath)) |_| {
-        self.allocator.free(absolutePath);
+pub fn load(self: *SharedContext, file_path: []const u8) !void {
+    const absolute_path = try std.Io.Dir.cwd().realPathFileAlloc(self.io, file_path, self.allocator);
+    if (self.bindings.get(absolute_path)) |_| {
+        self.allocator.free(absolute_path);
         return;
     }
 
-    const source = try readFileContents(self.allocator, self.io, filePath);
+    const source = try readFileContents(self.allocator, self.io, file_path);
     defer self.allocator.free(source);
 
-    const ret = try self.pipeline.run(self, filePath, source, self.options) orelse return error.Unexpected;
+    const ret = try self.pipeline.run(self, file_path, source, self.options) orelse return error.Unexpected;
 
-    try self.bindings.put(absolutePath, ret);
+    try self.bindings.put(absolute_path, ret);
 }
 
 pub fn loadSource(self: *SharedContext, source: []const u8) !void {
@@ -64,16 +64,16 @@ pub fn loadSource(self: *SharedContext, source: []const u8) !void {
     try self.bindings.put("_", ret);
 }
 
-pub fn get(self: *SharedContext, filePath: []const u8) !ReturnType {
-    if (std.mem.eql(u8, filePath, "_")) {
+pub fn get(self: *SharedContext, file_path: []const u8) !ReturnType {
+    if (std.mem.eql(u8, file_path, "_")) {
         if (self.bindings.get("_")) |ret| return ret;
 
         return error.FileNotFound;
     }
-    const absolutePath = try std.Io.Dir.cwd().realPathFileAlloc(self.io, filePath, self.allocator);
+    const absolute_path = try std.Io.Dir.cwd().realPathFileAlloc(self.io, file_path, self.allocator);
 
-    if (self.bindings.get(absolutePath)) |ret| return ret;
-    defer self.allocator.free(absolutePath);
+    if (self.bindings.get(absolute_path)) |ret| return ret;
+    defer self.allocator.free(absolute_path);
 
     return error.FileNotFound;
 }

@@ -1,14 +1,14 @@
 [x;[y;x*y]]
 ---
-LBRA
-IDENT ( x )
-SEMICOLON
-LBRA
-IDENT ( y )
-SEMICOLON
-IDENT ( x )
-ASTERISK
-IDENT ( y )
-RBRA
-RBRA
-EOF
+lbra
+ident ( x )
+semicolon
+lbra
+ident ( y )
+semicolon
+ident ( x )
+asterisk
+ident ( y )
+rbra
+rbra
+eof

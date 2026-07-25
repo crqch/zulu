@@ -4,4 +4,4 @@ type optional =
 match Some 2
     | None => 0
 ---
-MISSING_MATCH_CASE
+MissingMatchCase

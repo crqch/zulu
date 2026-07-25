@@ -1,7 +1,7 @@
 2 + x * 8
 ---
-BinaryOperation( ADD )
+BinaryOperation( add )
  Number( 2 )
- BinaryOperation( MULTIPLY )
+ BinaryOperation( multiply )
   Variable( x )
   Number( 8 )

@@ -15,13 +15,13 @@ const Parser = @This();
 allocator: std.mem.Allocator,
 current: usize = 0,
 tokens: []Token,
-sharedContext: ?*SharedContext,
+shared_context: ?*SharedContext,
 
 const Precedence = struct {
     pub const none: u8 = 0;
     pub const arrow: u8 = 5; //           =>
     pub const assignment: u8 = 10; //     =
-    pub const typeAscription: u8 = 15; // :
+    pub const type_ascription: u8 = 15; // :
     pub const tuple: u8 = 20; //          ,
     pub const logic_or: u8 = 30; //       or
     pub const logic_and: u8 = 40; //      and
@@ -31,27 +31,27 @@ const Precedence = struct {
     pub const factor: u8 = 80; //         *, /
     pub const unary: u8 = 90; //          !, -
     pub const call: u8 = 100; //          (), application
-    pub const memberAccess: u8 = 110; //  .
+    pub const member_access: u8 = 110; //  .
 };
 
 pub const ParserError = error{
-    EOF_NOT_REACHED,
-    EXPECTED_VARIABLE_AT_DECLARATION,
-    LAMBDA_UNRESOLVED,
-    EXPECTED_VARIABLE_AT_BINDING,
-    EXPECTED_EXPRESSION,
-    PARENTHESES_UNMATCHED,
-    UNKNOWN_ESCAPE_CHARACTER,
-    NOT_A_BINARY_OPERATION,
-    OUT_OF_MEMORY,
-    UNEXPECTED_TOKEN,
-    PATTERN_EXPECTED,
-    EXPECTED_PROPERTY_NAME,
-    EXPECTED_MODULE_NAME,
-    EXPECTED_MODULE_END,
-    FILE_NOT_FOUND,
-    ENVIRONMENT_NOT_FOUND,
-    COMPILE_ERROR,
+    EofNotReached,
+    ExpectedVariableAtDeclaration,
+    LambdaUnresolved,
+    ExpectedVariableAtBinding,
+    ExpectedExpression,
+    ParanthesesUnmatched,
+    UnknownEscapeCharacter,
+    NotABinaryOperation,
+    OutOfMemory,
+    UnexpectedToken,
+    PatternExpected,
+    ExpectedPropertyName,
+    ExpectedModuleName,
+    ExpectedModuleEnd,
+    FileNotFound,
+    EnvironmentNotFound,
+    CompileError,
 };
 
 const PrefixParselet = *const fn (self: *Parser) ParserError!*Expression;
@@ -61,26 +61,26 @@ const InfixParselet = struct {
     led: *const fn (self: *Parser, left: *Expression, precedence: u8) ParserError!*Expression,
 };
 
-pub fn init(allocator: std.mem.Allocator, tokens: []Token, sharedContext: ?*SharedContext) Parser {
-    return Parser{ .allocator = allocator, .tokens = tokens, .sharedContext = sharedContext };
+pub fn init(allocator: std.mem.Allocator, tokens: []Token, shared_context: ?*SharedContext) Parser {
+    return Parser{ .allocator = allocator, .tokens = tokens, .shared_context = shared_context };
 }
 
 pub fn parse(self: *Parser) ParserError!*Expression {
     const expr = try self.parseExpression(Precedence.none);
-    if (!self.matchToken(.EOF)) return error.EOF_NOT_REACHED;
+    if (!self.matchToken(.eof)) return ParserError.EofNotReached;
     return expr;
 }
 
-fn parseExpression(self: *Parser, minBp: u8) ParserError!*Expression {
+fn parseExpression(self: *Parser, min_bp: u8) ParserError!*Expression {
     var left = try self.nud();
 
     while (self.current < self.tokens.len) {
-        if (self.isAtPrimaryStart() and Precedence.call > minBp) {
+        if (self.isAtPrimaryStart() and Precedence.call > min_bp) {
             left = try self.applicationLed(left);
             continue;
         }
         const entry = led(self.tokens[self.current].type) orelse break;
-        if (entry.precedence <= minBp) break;
+        if (entry.precedence <= min_bp) break;
         self.current += 1;
         left = try entry.led(self, left, entry.precedence);
     }
@@ -91,119 +91,119 @@ fn nud(self: *Parser) ParserError!*Expression {
     const token = self.tokens[self.current];
     self.current += 1;
     return switch (token.type) {
-        .NUMBER => self.numberNud(),
-        .STRING => self.stringNud(),
-        .IDENT => self.identNud(),
-        .KW_TRUE, .KW_FALSE => self.boolNud(),
-        .MINUS => self.unaryMinusNud(),
-        .BANG => self.notNud(),
-        .LPAR => self.groupNud(),
-        .LBRA => self.lambdaNud(),
-        .KW_IF => self.ifNud(),
-        .KW_MATCH => self.matchNud(),
-        .KW_MOD => self.moduleNud(),
-        .KW_TYPE => self.typeNud(),
-        .KW_IMPORT => self.importNud(),
-        .KW_ENV => self.envNud(),
-        else => error.EXPECTED_EXPRESSION,
+        .number => self.numberNud(),
+        .string => self.stringNud(),
+        .ident => self.identNud(),
+        .kw_true, .kw_false => self.boolNud(),
+        .minus => self.unaryMinusNud(),
+        .bang => self.notNud(),
+        .lpar => self.groupNud(),
+        .lbra => self.lambdaNud(),
+        .kw_if => self.ifNud(),
+        .kw_match => self.matchNud(),
+        .kw_mod => self.moduleNud(),
+        .kw_type => self.typeNud(),
+        .kw_import => self.importNud(),
+        .kw_env => self.envNud(),
+        else => ParserError.ExpectedExpression,
     };
 }
 
 fn typeNud(self: *Parser) ParserError!*Expression {
-    const identToken = self.tokens[self.current];
-    try self.expect(.IDENT);
-    try self.expect(.EQ);
+    const ident_token = self.tokens[self.current];
+    try self.expect(.ident);
+    try self.expect(.eq);
 
-    var types = std.ArrayList(*TypeAst).initCapacity(self.allocator, 1) catch return ParserError.OUT_OF_MEMORY;
+    var types = std.ArrayList(*TypeAst).initCapacity(self.allocator, 1) catch return ParserError.OutOfMemory;
 
     // optional pipe before first type
-    _ = self.matchToken(.PIPE);
+    _ = self.matchToken(.pipe);
 
     while (true) {
-        types.append(self.allocator, try self.parseType()) catch return ParserError.OUT_OF_MEMORY;
-        if (!self.matchToken(.PIPE)) break;
+        types.append(self.allocator, try self.parseType()) catch return ParserError.OutOfMemory;
+        if (!self.matchToken(.pipe)) break;
     }
 
-    try self.expect(.SEMICOLON);
+    try self.expect(.semicolon);
     const index = self.current;
 
     const block = self.parseExpression(Precedence.none) catch |err| {
-        if (err == ParserError.EXPECTED_EXPRESSION) {
+        if (err == ParserError.ExpectedExpression) {
             self.current = index;
 
-            return self.newExpression(.{ .TypeDeclaration = .{
-                .identifier = identToken.lexeme,
-                .typesAst = types.items,
-                .block = try self.newExpression(.CurrentEnvironment),
+            return self.newExpression(.{ .type_declaration = .{
+                .identifier = ident_token.lexeme,
+                .types_ast = types.items,
+                .block = try self.newExpression(.current_environment),
             } });
         }
 
         return err;
     };
 
-    return self.newExpression(.{ .TypeDeclaration = .{
-        .identifier = identToken.lexeme,
-        .typesAst = types.items,
+    return self.newExpression(.{ .type_declaration = .{
+        .identifier = ident_token.lexeme,
+        .types_ast = types.items,
         .block = block,
     } });
 }
 
 fn importNud(self: *Parser) ParserError!*Expression {
     const token = self.tokens[self.current];
-    try self.expect(.STRING);
+    try self.expect(.string);
 
-    const filePath = try self.stringOfLexeme(token.lexeme);
+    const file_path = try self.stringOfLexeme(token.lexeme);
 
-    if (self.sharedContext) |sharedContext| {
-        sharedContext.load(filePath) catch |err| {
+    if (self.shared_context) |shared_context| {
+        shared_context.load(file_path) catch |err| {
             self.current -= 1;
             switch (err) {
-                error.FileNotFound => return ParserError.FILE_NOT_FOUND,
-                else => return ParserError.COMPILE_ERROR,
+                error.FileNotFound => return ParserError.FileNotFound,
+                else => return ParserError.CompileError,
             }
         };
     } else {
-        return ParserError.ENVIRONMENT_NOT_FOUND;
+        return ParserError.EnvironmentNotFound;
     }
 
-    if (self.matchToken(.AT)) {
+    if (self.matchToken(.at)) {
         const block = try self.parseExpression(Precedence.none);
-        return try self.newExpression(.{ .UseEnvironment = .{
-            .environment = try self.newExpression(.{ .Import = filePath }),
+        return try self.newExpression(.{ .use_environment = .{
+            .environment = try self.newExpression(.{ .import = file_path }),
             .block = block,
         } });
     }
 
-    return try self.newExpression(.{ .Import = filePath });
+    return try self.newExpression(.{ .import = file_path });
 }
 
 fn moduleNud(self: *Parser) ParserError!*Expression {
-    if (!self.matchToken(.IDENT)) return ParserError.EXPECTED_MODULE_NAME;
-    const moduleName = self.tokens[self.current - 1].lexeme;
+    if (!self.matchToken(.ident)) return ParserError.ExpectedModuleName;
+    const module_name = self.tokens[self.current - 1].lexeme;
 
-    try self.expect(.LCUR);
+    try self.expect(.lcur);
 
-    const moduleExpression = try self.parseExpression(Precedence.none);
+    const module_expression = try self.parseExpression(Precedence.none);
 
-    var expr = moduleExpression;
+    var expr = module_expression;
 
-    while (expr.* == .Declaration or expr.* == .TypeDeclaration) {
-        if (expr.* == .Declaration) expr = expr.Declaration.block else expr = expr.TypeDeclaration.block;
+    while (expr.* == .declaration or expr.* == .type_declaration) {
+        if (expr.* == .declaration) expr = expr.declaration.block else expr = expr.type_declaration.block;
     }
 
-    expr.* = .CurrentEnvironment;
+    expr.* = .current_environment;
 
-    self.expect(.RCUR) catch return ParserError.EXPECTED_MODULE_END;
+    self.expect(.rcur) catch return ParserError.ExpectedModuleEnd;
     const index = self.current;
 
-    const restExpression = self.parseExpression(Precedence.none) catch |err| {
-        if (err == ParserError.EXPECTED_EXPRESSION) {
+    const rest_expression = self.parseExpression(Precedence.none) catch |err| {
+        if (err == ParserError.ExpectedExpression) {
             self.current = index;
             return try self.newExpression(.{
-                .Module = .{
-                    .identifier = moduleName,
-                    .block = moduleExpression,
-                    .rest = try self.newExpression(.{ .Unit = {} }),
+                .module = .{
+                    .identifier = module_name,
+                    .block = module_expression,
+                    .rest = try self.newExpression(.{ .unit = {} }),
                 },
             });
         }
@@ -211,10 +211,10 @@ fn moduleNud(self: *Parser) ParserError!*Expression {
     };
 
     return try self.newExpression(Expression{
-        .Module = .{
-            .identifier = moduleName,
-            .block = moduleExpression,
-            .rest = restExpression,
+        .module = .{
+            .identifier = module_name,
+            .block = module_expression,
+            .rest = rest_expression,
         },
     });
 }
@@ -222,68 +222,68 @@ fn moduleNud(self: *Parser) ParserError!*Expression {
 fn matchNud(self: *Parser) ParserError!*Expression {
     const scrutinee = try self.parseExpression(Precedence.none);
 
-    var patternsArray = std.ArrayList(ast.MatchCase).initCapacity(self.allocator, 0) catch return ParserError.OUT_OF_MEMORY;
+    var patterns = std.ArrayList(ast.MatchCase).initCapacity(self.allocator, 0) catch return ParserError.OutOfMemory;
 
-    while (self.matchToken(.PIPE)) {
+    while (self.matchToken(.pipe)) {
         const pattern = try self.parsePattern();
 
-        try self.expect(.ARROW);
+        try self.expect(.arrow);
 
         const block = try self.parseExpression(Precedence.none);
 
-        patternsArray.append(self.allocator, .{
+        patterns.append(self.allocator, .{
             .pattern = pattern,
             .block = block,
-        }) catch return ParserError.OUT_OF_MEMORY;
+        }) catch return ParserError.OutOfMemory;
     }
 
-    if (scrutinee.* == .TypeAscription) {
-        return try self.newExpression(.{ .Match = .{
-            .scrutinee = scrutinee.TypeAscription.expression,
-            .cases = patternsArray.items,
-            .explicitScrutineeType = scrutinee.TypeAscription.explicitType,
+    if (scrutinee.* == .type_ascription) {
+        return try self.newExpression(.{ .match = .{
+            .scrutinee = scrutinee.type_ascription.expression,
+            .cases = patterns.items,
+            .explicit_scrutinee_type = scrutinee.type_ascription.explicit_type,
         } });
     }
 
-    return try self.newExpression(.{ .Match = .{
+    return try self.newExpression(.{ .match = .{
         .scrutinee = scrutinee,
-        .cases = patternsArray.items,
-        .explicitScrutineeType = null,
+        .cases = patterns.items,
+        .explicit_scrutinee_type = null,
     } });
 }
 
 fn parsePattern(self: *Parser) ParserError!*MatchPattern {
-    var leftPattern = try self.parsePrimaryPattern();
+    var left_pattern = try self.parsePrimaryPattern();
 
-    if (self.matchToken(.COMMA)) {
-        var tupleElements = std.ArrayList(*MatchPattern).initCapacity(self.allocator, 0) catch return ParserError.OUT_OF_MEMORY;
-        tupleElements.append(self.allocator, leftPattern) catch return ParserError.OUT_OF_MEMORY;
+    if (self.matchToken(.comma)) {
+        var tuple_elements = std.ArrayList(*MatchPattern).initCapacity(self.allocator, 0) catch return ParserError.OutOfMemory;
+        tuple_elements.append(self.allocator, left_pattern) catch return ParserError.OutOfMemory;
 
         while (true) {
-            const nextPattern = try self.parsePrimaryPattern();
-            tupleElements.append(self.allocator, nextPattern) catch return ParserError.OUT_OF_MEMORY;
+            const next_pattern = try self.parsePrimaryPattern();
+            tuple_elements.append(self.allocator, next_pattern) catch return ParserError.OutOfMemory;
 
-            if (!self.matchToken(.COMMA)) break;
+            if (!self.matchToken(.comma)) break;
         }
 
-        leftPattern = try self.newMatchPattern(.{
-            .Tuple = .{ .binds = tupleElements.items },
+        left_pattern = try self.newMatchPattern(.{
+            .tuple = .{ .binds = tuple_elements.items },
         });
     }
 
-    return leftPattern;
+    return left_pattern;
 }
 
 fn parsePrimaryPattern(self: *Parser) ParserError!*MatchPattern {
     const token = self.tokens[self.current];
-    if (self.matchToken(.IDENT)) {
+    if (self.matchToken(.ident)) {
         if (std.mem.eql(u8, token.lexeme, "_")) {
-            return try self.newMatchPattern(.Wildcard);
+            return try self.newMatchPattern(.wildcard);
         }
         if (std.ascii.isUpper(token.lexeme[0])) {
             const pattern: *MatchPattern = self.parsePattern() catch |err| {
-                if (err == ParserError.PATTERN_EXPECTED) {
-                    return try self.newMatchPattern(.{ .Constructor = .{
+                if (err == ParserError.PatternExpected) {
+                    return try self.newMatchPattern(.{ .constructor = .{
                         .name = token.lexeme,
                         .payload = null,
                     } });
@@ -291,47 +291,47 @@ fn parsePrimaryPattern(self: *Parser) ParserError!*MatchPattern {
                 return err;
             };
 
-            return try self.newMatchPattern(.{ .Constructor = .{
+            return try self.newMatchPattern(.{ .constructor = .{
                 .name = token.lexeme,
                 .payload = pattern,
             } });
         }
-        return try self.newMatchPattern(.{ .Identifier = token.lexeme });
-    } else if (self.matchToken(.LPAR)) {
+        return try self.newMatchPattern(.{ .identifier = token.lexeme });
+    } else if (self.matchToken(.lpar)) {
         const pattern = try self.parsePattern();
-        try self.expect(.RPAR);
+        try self.expect(.rpar);
         return pattern;
     }
-    return ParserError.PATTERN_EXPECTED;
+    return ParserError.PatternExpected;
 }
 
 fn newMatchPattern(self: *Parser, data: MatchPattern) ParserError!*MatchPattern {
-    const matchPattern = self.allocator.create(MatchPattern) catch return ParserError.OUT_OF_MEMORY;
-    matchPattern.* = data;
-    return matchPattern;
+    const match_pattern = self.allocator.create(MatchPattern) catch return ParserError.OutOfMemory;
+    match_pattern.* = data;
+    return match_pattern;
 }
 
 fn envNud(self: *Parser) ParserError!*Expression {
-    return try self.newExpression(.CurrentEnvironment);
+    return try self.newExpression(.current_environment);
 }
 
 fn numberNud(self: *Parser) ParserError!*Expression {
     return try self.newExpression(Expression{
-        .Number = self.previousToken().lexeme,
+        .number = self.previousToken().lexeme,
     });
 }
 
 fn stringNud(self: *Parser) ParserError!*Expression {
     return try self.newExpression(Expression{
-        .String = try self.stringOfLexeme(self.previousToken().lexeme),
+        .string = try self.stringOfLexeme(self.previousToken().lexeme),
     });
 }
 
 fn identNud(self: *Parser) ParserError!*Expression {
-    const firstChar = self.previousToken().lexeme[0];
-    if (firstChar >= 'A' and firstChar <= 'Z') {
+    const first_char = self.previousToken().lexeme[0];
+    if (first_char >= 'A' and first_char <= 'Z') {
         return try self.newExpression(Expression{
-            .Constructor = .{
+            .constructor = .{
                 .name = self.previousToken().lexeme,
                 .payload = null,
             },
@@ -339,201 +339,201 @@ fn identNud(self: *Parser) ParserError!*Expression {
     }
 
     return try self.newExpression(Expression{
-        .Variable = self.previousToken().lexeme,
+        .variable = self.previousToken().lexeme,
     });
 }
 
 fn boolNud(self: *Parser) ParserError!*Expression {
     return try self.newExpression(Expression{
-        .Boolean = self.previousToken().type == .KW_TRUE,
+        .boolean = self.previousToken().type == .kw_true,
     });
 }
 
 fn unaryMinusNud(self: *Parser) ParserError!*Expression {
-    return try self.newExpression(Expression{ .UnaryMinus = try self.parseExpression(Precedence.unary) });
+    return try self.newExpression(Expression{ .unary_minus = try self.parseExpression(Precedence.unary) });
 }
 
 fn notNud(self: *Parser) ParserError!*Expression {
     return try self.newExpression(Expression{
-        .Not = try self.parseExpression(Precedence.unary),
+        .not = try self.parseExpression(Precedence.unary),
     });
 }
 
 fn groupNud(self: *Parser) ParserError!*Expression {
-    const innerExpression = self.parseExpression(Precedence.none) catch |err| {
-        if (err == ParserError.EXPECTED_EXPRESSION) return try self.newExpression(.Unit);
+    const inner_expression = self.parseExpression(Precedence.none) catch |err| {
+        if (err == ParserError.ExpectedExpression) return try self.newExpression(.unit);
         return err;
     };
 
-    self.expect(.RPAR) catch return ParserError.PARENTHESES_UNMATCHED;
-    return innerExpression;
+    self.expect(.rpar) catch return ParserError.ParanthesesUnmatched;
+    return inner_expression;
 }
 
 fn lambdaNud(self: *Parser) ParserError!*Expression {
-    const beginIndex = self.current;
+    const begin_index = self.current;
 
-    self.slide(.SEMICOLON) catch return ParserError.LAMBDA_UNRESOLVED;
+    self.slide(.semicolon) catch return ParserError.LambdaUnresolved;
     var lambda = try self.parseExpression(Precedence.none);
 
-    self.expect(.RBRA) catch return ParserError.LAMBDA_UNRESOLVED;
-    const endIndex = self.current;
+    self.expect(.rbra) catch return ParserError.LambdaUnresolved;
+    const end_index = self.current;
 
-    var binds = std.ArrayList(*Expression).initCapacity(self.allocator, 1) catch return ParserError.OUT_OF_MEMORY;
+    var binds = std.ArrayList(*Expression).initCapacity(self.allocator, 1) catch return ParserError.OutOfMemory;
 
-    self.current = beginIndex;
-    while (!self.matchToken(.SEMICOLON)) {
-        binds.append(self.allocator, try self.parseExpression(200)) catch return ParserError.OUT_OF_MEMORY;
+    self.current = begin_index;
+    while (!self.matchToken(.semicolon)) {
+        binds.append(self.allocator, try self.parseExpression(200)) catch return ParserError.OutOfMemory;
     }
 
     var i = binds.items.len - 1;
     while (i >= 0) : (i -= 1) {
         const bind = binds.items[i];
 
-        if (bind.* != .Variable and (bind.* != .TypeAscription or bind.TypeAscription.expression.* != .Variable)) return ParserError.EXPECTED_VARIABLE_AT_BINDING;
+        if (bind.* != .variable and (bind.* != .type_ascription or bind.type_ascription.expression.* != .variable)) return ParserError.ExpectedVariableAtBinding;
 
-        if (bind.* == .Variable) {
-            lambda = try self.newExpression(Expression{ .Lambda = .{
+        if (bind.* == .variable) {
+            lambda = try self.newExpression(Expression{ .lambda = .{
                 .block = lambda,
-                .identifier = bind.Variable,
-                .inferredType = null,
-                .explicitArgumentType = null,
+                .identifier = bind.variable,
+                .inferred_type = null,
+                .explicit_argument_type = null,
             } });
         } else {
-            lambda = try self.newExpression(Expression{ .Lambda = .{
+            lambda = try self.newExpression(Expression{ .lambda = .{
                 .block = lambda,
-                .identifier = bind.TypeAscription.expression.Variable,
-                .inferredType = null,
-                .explicitArgumentType = bind.TypeAscription.explicitType,
+                .identifier = bind.type_ascription.expression.variable,
+                .inferred_type = null,
+                .explicit_argument_type = bind.type_ascription.explicit_type,
             } });
         }
         if (i == 0) break;
     }
 
-    self.current = endIndex;
+    self.current = end_index;
     return lambda;
 }
 
-fn expect(self: *Parser, tokenType: TokenType) ParserError!void {
-    if (self.current >= self.tokens.len or self.tokens[self.current].type != tokenType) return ParserError.UNEXPECTED_TOKEN;
+fn expect(self: *Parser, token_type: TokenType) ParserError!void {
+    if (self.current >= self.tokens.len or self.tokens[self.current].type != token_type) return ParserError.UnexpectedToken;
     self.current += 1;
 }
 
 fn ifNud(self: *Parser) ParserError!*Expression {
-    try self.expect(.LPAR);
+    try self.expect(.lpar);
     const condition = try self.parseExpression(Precedence.none);
-    try self.expect(.RPAR);
-    const satisfyBlock = try self.parseExpression(Precedence.none);
-    try self.expect(.KW_ELSE);
-    const elseBlock = try self.parseExpression(Precedence.none);
+    try self.expect(.rpar);
+    const satisfy_block = try self.parseExpression(Precedence.none);
+    try self.expect(.kw_else);
+    const else_block = try self.parseExpression(Precedence.none);
 
     return try self.newExpression(.{
-        .Condition = .{
+        .condition = .{
             .expression = condition,
-            .satisfyBlock = satisfyBlock,
-            .elseBlock = elseBlock,
+            .satisfy_block = satisfy_block,
+            .else_block = else_block,
         },
     });
 }
 
 fn newExpression(self: *Parser, expr: Expression) ParserError!*Expression {
-    const freshExpr = self.allocator.create(Expression) catch return ParserError.OUT_OF_MEMORY;
-    freshExpr.* = expr;
+    const fresh_expr = self.allocator.create(Expression) catch return ParserError.OutOfMemory;
+    fresh_expr.* = expr;
 
-    return freshExpr;
+    return fresh_expr;
 }
 
-fn led(tokenType: TokenType) ?InfixParselet {
-    return switch (tokenType) {
-        .ASTERISK, .SLASH => .{ .precedence = Precedence.factor, .led = binOpLed },
-        .PLUS, .MINUS => .{ .precedence = Precedence.term, .led = binOpLed },
-        .GT, .GTEQ, .LT, .LTEQ => .{ .precedence = Precedence.comparison, .led = binOpLed },
-        .EQEQ, .NOTEQ, .NOTEQEQ => .{ .precedence = Precedence.equality, .led = binOpLed },
-        .EQ => .{ .precedence = Precedence.assignment, .led = binOpLed },
-        .KW_AND => .{ .precedence = Precedence.logic_and, .led = binOpLed },
-        .KW_OR => .{ .precedence = Precedence.logic_or, .led = binOpLed },
-        .COMMA => .{ .precedence = Precedence.tuple, .led = tupleLed },
-        .COLON => .{ .precedence = Precedence.typeAscription, .led = typeAscriptionLed },
-        .DOT => .{ .precedence = Precedence.memberAccess, .led = memberAccessLed },
+fn led(token_type: TokenType) ?InfixParselet {
+    return switch (token_type) {
+        .asterisk, .slash => .{ .precedence = Precedence.factor, .led = binOpLed },
+        .plus, .minus => .{ .precedence = Precedence.term, .led = binOpLed },
+        .gt, .gt_eq, .lt, .lt_eq => .{ .precedence = Precedence.comparison, .led = binOpLed },
+        .eq_eq, .not_eq, .not_eq_eq => .{ .precedence = Precedence.equality, .led = binOpLed },
+        .eq => .{ .precedence = Precedence.assignment, .led = binOpLed },
+        .kw_and => .{ .precedence = Precedence.logic_and, .led = binOpLed },
+        .kw_or => .{ .precedence = Precedence.logic_or, .led = binOpLed },
+        .comma => .{ .precedence = Precedence.tuple, .led = tupleLed },
+        .colon => .{ .precedence = Precedence.type_ascription, .led = typeAscriptionLed },
+        .dot => .{ .precedence = Precedence.member_access, .led = memberAccessLed },
         else => null,
     };
 }
 
-fn memberAccessLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*Expression {
-    _ = minBp;
-    if (!self.matchToken(.IDENT)) return ParserError.EXPECTED_PROPERTY_NAME;
+fn memberAccessLed(self: *Parser, left: *Expression, min_bp: u8) ParserError!*Expression {
+    _ = min_bp;
+    if (!self.matchToken(.ident)) return ParserError.ExpectedPropertyName;
 
-    const propertyName = self.previousToken().lexeme;
+    const property_name = self.previousToken().lexeme;
 
-    return try self.newExpression(Expression{ .MemberAccess = .{
+    return try self.newExpression(Expression{ .member_access = .{
         .object = left,
-        .member = propertyName,
+        .member = property_name,
     } });
 }
 
 fn applicationLed(self: *Parser, left: *Expression) ParserError!*Expression {
     const right = try self.parseExpression(Precedence.call + 1);
 
-    if (left.* == .Constructor) {
-        left.Constructor.payload = right;
+    if (left.* == .constructor) {
+        left.constructor.payload = right;
 
         return left;
     }
 
-    return try self.newExpression(Expression{ .Application = .{
+    return try self.newExpression(Expression{ .application = .{
         .callee = left,
         .value = right,
     } });
 }
 
-fn binOpLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*Expression {
+fn binOpLed(self: *Parser, left: *Expression, min_bp: u8) ParserError!*Expression {
     const bop = try bopOfToken(self.previousToken().type);
-    const right = try self.parseExpression(minBp + 1);
+    const right = try self.parseExpression(min_bp + 1);
 
-    if (bop == .EQ and self.matchToken(.SEMICOLON)) {
-        if (left.* != .Variable and left.* != .TypeAscription) return ParserError.EXPECTED_VARIABLE_AT_DECLARATION;
+    if (bop == .eq and self.matchToken(.semicolon)) {
+        if (left.* != .variable and left.* != .type_ascription) return ParserError.ExpectedVariableAtDeclaration;
         var ident: ?[]const u8 = null;
         var tp: ?*TypeAst = null;
 
         const index = self.current;
 
-        if (left.* == .TypeAscription) {
-            if (left.TypeAscription.expression.* != .Variable) return ParserError.EXPECTED_VARIABLE_AT_DECLARATION;
-            ident = left.TypeAscription.expression.Variable;
-            tp = left.TypeAscription.explicitType;
+        if (left.* == .type_ascription) {
+            if (left.type_ascription.expression.* != .variable) return ParserError.ExpectedVariableAtDeclaration;
+            ident = left.type_ascription.expression.variable;
+            tp = left.type_ascription.explicit_type;
 
             self.allocator.destroy(left);
         }
 
-        if (left.* == .Variable) {
-            ident = left.Variable;
+        if (left.* == .variable) {
+            ident = left.variable;
         }
 
         const block = self.parseExpression(Precedence.none) catch |err| {
             self.current = index;
-            if (err == ParserError.EXPECTED_EXPRESSION)
+            if (err == ParserError.ExpectedExpression)
                 return try self.newExpression(.{
-                    .Declaration = .{
+                    .declaration = .{
                         .identifier = ident.?,
                         .expression = right,
-                        .block = try self.newExpression(.{ .CurrentEnvironment = {} }),
-                        .explicitType = tp,
+                        .block = try self.newExpression(.{ .current_environment = {} }),
+                        .explicit_type = tp,
                     },
                 });
             return err;
         };
 
         return try self.newExpression(.{
-            .Declaration = .{
+            .declaration = .{
                 .identifier = ident.?,
                 .expression = right,
                 .block = block,
-                .explicitType = tp,
+                .explicit_type = tp,
             },
         });
     }
 
     return try self.newExpression(.{
-        .BinaryOperation = .{
+        .binary_operation = .{
             .operation = bop,
             .left = left,
             .right = right,
@@ -541,14 +541,14 @@ fn binOpLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*Expression
     });
 }
 
-fn typeAscriptionLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*Expression {
-    _ = minBp;
-    const explicitType = try self.parseType();
+fn typeAscriptionLed(self: *Parser, left: *Expression, min_bp: u8) ParserError!*Expression {
+    _ = min_bp;
+    const explicit_type = try self.parseType();
 
     return try self.newExpression(.{
-        .TypeAscription = .{
+        .type_ascription = .{
             .expression = left,
-            .explicitType = explicitType,
+            .explicit_type = explicit_type,
         },
     });
 }
@@ -556,20 +556,20 @@ fn typeAscriptionLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*E
 fn parseType(self: *Parser) ParserError!*TypeAst {
     const left = try self.parseLambda();
 
-    if (self.matchToken(.KW_OF)) {
-        if (left.* != .Identifier or !(left.Identifier[0] >= 'A' and left.Identifier[0] <= 'Z')) return ParserError.UNEXPECTED_TOKEN;
+    if (self.matchToken(.kw_of)) {
+        if (left.* != .identifier or !(left.identifier[0] >= 'A' and left.identifier[0] <= 'Z')) return ParserError.UnexpectedToken;
 
         const right = try self.parseLambda();
 
-        return try self.newTypeAst(.{ .Constructor = .{
-            .name = left.Identifier,
+        return try self.newTypeAst(.{ .constructor = .{
+            .name = left.identifier,
             .payload = right,
         } });
     }
 
-    if (left.* == .Identifier and left.Identifier[0] >= 'A' and left.Identifier[0] <= 'Z') {
-        return try self.newTypeAst(.{ .Constructor = .{
-            .name = left.Identifier,
+    if (left.* == .identifier and left.identifier[0] >= 'A' and left.identifier[0] <= 'Z') {
+        return try self.newTypeAst(.{ .constructor = .{
+            .name = left.identifier,
             .payload = null,
         } });
     }
@@ -580,13 +580,13 @@ fn parseType(self: *Parser) ParserError!*TypeAst {
 fn parseLambda(self: *Parser) ParserError!*TypeAst {
     const left = try self.parseTupleType();
 
-    if (self.matchToken(.ARROW)) {
+    if (self.matchToken(.arrow)) {
         const right = try self.parseLambda();
 
         return try self.newTypeAst(.{
-            .Function = .{
+            .function = .{
                 .argument = left,
-                .returnType = right,
+                .returns = right,
             },
         });
     }
@@ -595,12 +595,12 @@ fn parseLambda(self: *Parser) ParserError!*TypeAst {
 }
 
 fn parseTupleType(self: *Parser) ParserError!*TypeAst {
-    var types = std.ArrayList(*TypeAst).initCapacity(self.allocator, 1) catch return ParserError.OUT_OF_MEMORY;
+    var types = std.ArrayList(*TypeAst).initCapacity(self.allocator, 1) catch return ParserError.OutOfMemory;
 
-    types.append(self.allocator, try self.parsePrimaryType()) catch return ParserError.OUT_OF_MEMORY;
+    types.append(self.allocator, try self.parsePrimaryType()) catch return ParserError.OutOfMemory;
 
-    while (self.matchToken(.ASTERISK)) {
-        types.append(self.allocator, try self.parsePrimaryType()) catch return ParserError.OUT_OF_MEMORY;
+    while (self.matchToken(.asterisk)) {
+        types.append(self.allocator, try self.parsePrimaryType()) catch return ParserError.OutOfMemory;
     }
 
     if (types.items.len == 1) {
@@ -608,66 +608,66 @@ fn parseTupleType(self: *Parser) ParserError!*TypeAst {
         return types.items[0];
     }
 
-    return try self.newTypeAst(.{ .Tuple = types.items });
+    return try self.newTypeAst(.{ .tuple = types.items });
 }
 
 fn parsePrimaryType(self: *Parser) ParserError!*TypeAst {
     const token = self.tokens[self.current];
 
-    if (self.matchToken(.LPAR)) {
-        const groupType = try self.parseType();
+    if (self.matchToken(.lpar)) {
+        const group_type = try self.parseType();
 
-        try self.expect(.RPAR);
+        try self.expect(.rpar);
 
-        return groupType;
+        return group_type;
     }
 
-    if (self.matchToken(.IDENT)) {
+    if (self.matchToken(.ident)) {
         if (std.mem.eql(u8, token.lexeme, "_")) {
-            return try self.newTypeAst(.{ .Wildcard = {} });
+            return try self.newTypeAst(.{ .wildcard = {} });
         }
-        return try self.newTypeAst(.{ .Identifier = token.lexeme });
+        return try self.newTypeAst(.{ .identifier = token.lexeme });
     }
 
-    return ParserError.UNEXPECTED_TOKEN;
+    return ParserError.UnexpectedToken;
 }
 
-fn newTypeAst(self: *Parser, typeAst: TypeAst) ParserError!*TypeAst {
-    const fresh = self.allocator.create(TypeAst) catch return ParserError.OUT_OF_MEMORY;
+fn newTypeAst(self: *Parser, type_ast: TypeAst) ParserError!*TypeAst {
+    const fresh = self.allocator.create(TypeAst) catch return ParserError.OutOfMemory;
 
-    fresh.* = typeAst;
+    fresh.* = type_ast;
 
     return fresh;
 }
 
-fn tupleLed(self: *Parser, left: *Expression, minBp: u8) ParserError!*Expression {
-    var expressionsArray = std.ArrayList(*Expression).initCapacity(self.allocator, 0) catch return ParserError.OUT_OF_MEMORY;
+fn tupleLed(self: *Parser, left: *Expression, min_bp: u8) ParserError!*Expression {
+    var expressions_array = std.ArrayList(*Expression).initCapacity(self.allocator, 0) catch return ParserError.OutOfMemory;
 
-    expressionsArray.append(self.allocator, left) catch return ParserError.OUT_OF_MEMORY;
+    expressions_array.append(self.allocator, left) catch return ParserError.OutOfMemory;
 
     self.current -= 1;
 
-    while (self.matchToken(.COMMA)) {
+    while (self.matchToken(.comma)) {
         const saved_pos = self.current;
 
-        const next = self.parseExpression(minBp) catch |err| {
-            if (err == ParserError.EXPECTED_EXPRESSION) {
+        const next = self.parseExpression(min_bp) catch |err| {
+            if (err == ParserError.ExpectedExpression) {
                 self.current = saved_pos;
                 break;
             }
             return err;
         };
-        expressionsArray.append(self.allocator, next) catch return ParserError.OUT_OF_MEMORY;
+        expressions_array.append(self.allocator, next) catch return ParserError.OutOfMemory;
     }
 
     return try self.newExpression(.{
-        .Tuple = expressionsArray.items,
+        .tuple = expressions_array.items,
     });
 }
 
-fn matchToken(self: *Parser, tokenType: TokenType) bool {
+fn matchToken(self: *Parser, token_type: TokenType) bool {
     if (self.current >= self.tokens.len) return false;
-    if (self.tokens[self.current].type == tokenType) {
+    if (self.tokens[self.current].type == token_type) {
         self.current += 1;
         return true;
     }
@@ -677,38 +677,38 @@ fn matchToken(self: *Parser, tokenType: TokenType) bool {
 fn isAtPrimaryStart(self: *Parser) bool {
     if (self.current >= self.tokens.len) return false;
     const token = self.tokens[self.current];
-    const tokenType = token.type;
-    return tokenType == .NUMBER or
-        tokenType == .STRING or
-        tokenType == .KW_TRUE or
-        tokenType == .KW_FALSE or
-        tokenType == .KW_IF or
-        tokenType == .LPAR or
-        tokenType == .LBRA or
-        tokenType == .BANG or
-        tokenType == .IDENT or
-        tokenType == .KW_TYPE or
-        tokenType == .KW_ENV or
-        tokenType == .KW_MOD;
+    const token_type = token.type;
+    return token_type == .number or
+        token_type == .string or
+        token_type == .kw_true or
+        token_type == .kw_false or
+        token_type == .kw_if or
+        token_type == .lpar or
+        token_type == .lbra or
+        token_type == .bang or
+        token_type == .ident or
+        token_type == .kw_type or
+        token_type == .kw_env or
+        token_type == .kw_mod;
 }
 
 fn previousToken(self: *Parser) Token {
     return self.tokens[self.current - 1];
 }
 
-fn slide(self: *Parser, tokenType: TokenType) ParserError!void {
+fn slide(self: *Parser, token_type: TokenType) ParserError!void {
     while (self.current < self.tokens.len) {
-        if (self.tokens[self.current].type == tokenType) {
+        if (self.tokens[self.current].type == token_type) {
             self.current += 1;
             return;
         }
         self.current += 1;
     }
-    return ParserError.UNEXPECTED_TOKEN;
+    return ParserError.UnexpectedToken;
 }
 
 fn stringOfLexeme(self: *Parser, lexeme: []const u8) ParserError![]u8 {
-    var string = std.ArrayList(u8).initCapacity(self.allocator, 0) catch return ParserError.OUT_OF_MEMORY;
+    var string = std.ArrayList(u8).initCapacity(self.allocator, 0) catch return ParserError.OutOfMemory;
     var escape = false;
 
     for (lexeme[1 .. lexeme.len - 1]) |c| {
@@ -720,16 +720,16 @@ fn stringOfLexeme(self: *Parser, lexeme: []const u8) ParserError![]u8 {
                 't' => char = '\t',
                 '"' => char = '"',
                 '\\' => char = '\\',
-                else => return error.UNKNOWN_ESCAPE_CHARACTER,
+                else => return ParserError.UnknownEscapeCharacter,
             }
             escape = false;
-            string.append(self.allocator, char) catch return ParserError.OUT_OF_MEMORY;
+            string.append(self.allocator, char) catch return ParserError.OutOfMemory;
         } else {
             if (c == '\\') {
                 escape = true;
                 continue;
             }
-            string.append(self.allocator, c) catch return ParserError.OUT_OF_MEMORY;
+            string.append(self.allocator, c) catch return ParserError.OutOfMemory;
         }
     }
 
@@ -738,20 +738,20 @@ fn stringOfLexeme(self: *Parser, lexeme: []const u8) ParserError![]u8 {
 
 fn bopOfToken(tp: TokenType) ParserError!Bop {
     return switch (tp) {
-        .EQ => Bop.EQ,
-        .EQEQ => Bop.EQEQ,
-        .NOTEQ => Bop.NOTEQ,
-        .NOTEQEQ => Bop.NOTEQEQ,
-        .GT => Bop.GT,
-        .GTEQ => Bop.GTEQ,
-        .LT => Bop.LT,
-        .LTEQ => Bop.LTEQ,
-        .PLUS => Bop.ADD,
-        .MINUS => Bop.SUBTRACT,
-        .ASTERISK => Bop.MULTIPLY,
-        .SLASH => Bop.DIVIDE,
-        .KW_AND => Bop.AND,
-        .KW_OR => Bop.OR,
-        else => return error.NOT_A_BINARY_OPERATION,
+        .eq => Bop.eq,
+        .eq_eq => Bop.eq_eq,
+        .not_eq => Bop.not_eq,
+        .not_eq_eq => Bop.not_eq_eq,
+        .gt => Bop.gt,
+        .gt_eq => Bop.gt_eq,
+        .lt => Bop.lt,
+        .lt_eq => Bop.lt_eq,
+        .plus => Bop.add,
+        .minus => Bop.subtract,
+        .asterisk => Bop.multiply,
+        .slash => Bop.divide,
+        .kw_and => Bop.and_op,
+        .kw_or => Bop.or_op,
+        else => return ParserError.NotABinaryOperation,
     };
 }

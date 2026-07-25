@@ -1,6 +1,6 @@
 "This is an example string \\n
 "
 ---
-STRING ( "This is an example string \\n
+string ( "This is an example string \\n
 " )
-EOF
+eof

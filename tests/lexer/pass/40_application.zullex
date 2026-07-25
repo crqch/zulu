@@ -1,9 +1,9 @@
 [x;x] 2
 ---
-LBRA
-IDENT ( x )
-SEMICOLON
-IDENT ( x )
-RBRA
-NUMBER ( 2 )
-EOF
+lbra
+ident ( x )
+semicolon
+ident ( x )
+rbra
+number ( 2 )
+eof

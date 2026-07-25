@@ -1,5 +1,5 @@
 2 + 2
 ---
-BinaryOperation( ADD )
+BinaryOperation( add )
  Number( 2 )
  Number( 2 )

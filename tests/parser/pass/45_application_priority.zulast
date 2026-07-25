@@ -3,7 +3,7 @@ f=[a;a+a] 2;x
 Declaration ( f )
  Application
   Lambda ( a )
-   BinaryOperation( ADD )
+   BinaryOperation( add )
     Variable( a )
     Variable( a )
   Number( 2 )

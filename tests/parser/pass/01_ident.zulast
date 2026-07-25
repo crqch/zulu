@@ -1,8 +1,8 @@
 @x - y + !test + #test
 ---
-BinaryOperation( ADD )
- BinaryOperation( ADD )
-  BinaryOperation( SUBTRACT )
+BinaryOperation( add )
+ BinaryOperation( add )
+  BinaryOperation( subtract )
    Variable( @x )
    Variable( y )
   Not

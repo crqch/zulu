@@ -44,14 +44,14 @@ pub const Options = struct {
     };
 };
 
-pub fn readFileContents(allocator: std.mem.Allocator, io: std.Io, filePath: []const u8) ![]const u8 {
-    var file = try std.Io.Dir.cwd().openFile(io, filePath, .{ .mode = .read_only });
+pub fn readFileContents(allocator: std.mem.Allocator, io: std.Io, file_path: []const u8) ![]const u8 {
+    var file = try std.Io.Dir.cwd().openFile(io, file_path, .{ .mode = .read_only });
     defer file.close(io);
 
-    var fileReader = file.reader(io, &.{});
+    var file_reader = file.reader(io, &.{});
 
-    const maxFileSize = 1024 * 1024 * 10;
-    const contents = fileReader.interface.allocRemaining(allocator, .limited(maxFileSize));
+    const max_file_size = 1024 * 1024 * 10;
+    const contents = file_reader.interface.allocRemaining(allocator, .limited(max_file_size));
 
     return contents;
 }

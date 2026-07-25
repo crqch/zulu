@@ -1,11 +1,11 @@
 @x - y + !test + #test
 ---
-IDENT ( @x )
-MINUS
-IDENT ( y )
-PLUS
-BANG
-IDENT ( test )
-PLUS
-IDENT ( #test )
-EOF
+ident ( @x )
+minus
+ident ( y )
+plus
+bang
+ident ( test )
+plus
+ident ( #test )
+eof

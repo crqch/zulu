@@ -4,10 +4,10 @@ Application
  Lambda ( x )
   Application
    Lambda ( x )
-    BinaryOperation( MULTIPLY )
+    BinaryOperation( multiply )
      Variable( x )
      Number( 2 )
-   BinaryOperation( MULTIPLY )
+   BinaryOperation( multiply )
     Variable( x )
     Variable( x )
  Number( 2 )

@@ -13,83 +13,83 @@ tokens: std.ArrayList(Token),
 const Location = struct { line: usize, column: usize };
 
 pub const TokenType = enum {
-    PLUS,
-    MINUS,
-    SLASH,
-    ASTERISK,
-    AT,
-    DOT,
-    COMMA,
-    NOTEQ,
-    EQ,
-    GT,
-    LT,
-    BANG,
-    PIPE,
-    SEMICOLON,
-    COLON,
+    plus,
+    minus,
+    slash,
+    asterisk,
+    at,
+    dot,
+    comma,
+    not_eq,
+    eq,
+    gt,
+    lt,
+    bang,
+    pipe,
+    semicolon,
+    colon,
 
-    GTEQ,
-    LTEQ,
-    NOTEQEQ,
-    EQEQ,
-    SLASHSLASH,
+    gt_eq,
+    lt_eq,
+    not_eq_eq,
+    eq_eq,
+    slash_slash,
 
-    ARROW,
+    arrow,
 
-    LPAR,
-    RPAR,
-    LBRA,
-    RBRA,
-    LCUR,
-    RCUR,
+    lpar,
+    rpar,
+    lbra,
+    rbra,
+    lcur,
+    rcur,
 
-    IDENT,
-    NUMBER,
-    STRING,
+    ident,
+    number,
+    string,
 
-    KW_AND,
-    KW_OR,
+    kw_and,
+    kw_or,
 
-    KW_TRUE,
-    KW_FALSE,
-    KW_IF,
-    KW_ELSE,
-    KW_MATCH,
-    KW_MOD,
-    KW_TYPE,
-    KW_IMPORT,
-    KW_OF,
-    KW_ENV,
+    kw_true,
+    kw_false,
+    kw_if,
+    kw_else,
+    kw_match,
+    kw_mod,
+    kw_type,
+    kw_import,
+    kw_of,
+    kw_env,
 
-    EOF,
+    eof,
 };
 
 pub const Token = struct { type: TokenType, lexeme: []const u8, location: Location };
 
 pub const LexerError = error{
-    UNMATCHED_TOKEN,
-    UNTERMINATED_STRING_LITERAL,
-    OUT_OF_MEMORY,
+    UnmatchedToken,
+    UnterminatedStringLiteral,
+    OutOfMemory,
 };
 
 const keywords = std.StaticStringMap(TokenType).initComptime(.{
-    .{ "true", .KW_TRUE },
-    .{ "false", .KW_FALSE },
-    .{ "and", .KW_AND },
-    .{ "or", .KW_OR },
-    .{ "if", .KW_IF },
-    .{ "else", .KW_ELSE },
-    .{ "match", .KW_MATCH },
-    .{ "mod", .KW_MOD },
-    .{ "type", .KW_TYPE },
-    .{ "import", .KW_IMPORT },
-    .{ "@env", .KW_ENV },
-    .{ "of", .KW_OF },
+    .{ "true", .kw_true },
+    .{ "false", .kw_false },
+    .{ "and", .kw_and },
+    .{ "or", .kw_or },
+    .{ "if", .kw_if },
+    .{ "else", .kw_else },
+    .{ "match", .kw_match },
+    .{ "mod", .kw_mod },
+    .{ "type", .kw_type },
+    .{ "import", .kw_import },
+    .{ "@env", .kw_env },
+    .{ "of", .kw_of },
 });
 
 pub fn init(allocator: std.mem.Allocator, source: []const u8) !Lexer {
-    return Lexer{ .allocator = allocator, .tokens = std.ArrayList(Token).initCapacity(allocator, 0) catch return LexerError.OUT_OF_MEMORY, .source = source };
+    return Lexer{ .allocator = allocator, .tokens = std.ArrayList(Token).initCapacity(allocator, 0) catch return LexerError.OutOfMemory, .source = source };
 }
 
 pub fn deinit(self: *Lexer) void {
@@ -103,21 +103,21 @@ pub fn scanTokens(self: *Lexer) LexerError![]Token {
     }
 
     self.start = self.current;
-    try self.addToken(.EOF);
+    try self.addToken(.eof);
 
     return self.tokens.items;
 }
 
 pub fn printTokens(self: *Lexer) LexerError![]const u8 {
-    var buffer = std.ArrayList(u8).initCapacity(self.allocator, 0) catch return LexerError.OUT_OF_MEMORY;
+    var buffer = std.ArrayList(u8).initCapacity(self.allocator, 0) catch return LexerError.OutOfMemory;
 
     for (self.tokens.items) |token| {
         switch (token.type) {
-            .IDENT, .NUMBER, .STRING => {
-                buffer.print(self.allocator, "{s} ( {s} )\n", .{ @tagName(token.type), token.lexeme }) catch return LexerError.OUT_OF_MEMORY;
+            .ident, .number, .string => {
+                buffer.print(self.allocator, "{s} ( {s} )\n", .{ @tagName(token.type), token.lexeme }) catch return LexerError.OutOfMemory;
             },
             else => {
-                buffer.print(self.allocator, "{s}\n", .{@tagName(token.type)}) catch return LexerError.OUT_OF_MEMORY;
+                buffer.print(self.allocator, "{s}\n", .{@tagName(token.type)}) catch return LexerError.OutOfMemory;
             },
         }
     }
@@ -154,7 +154,7 @@ fn scanToken(self: *Lexer) LexerError!void {
                     try self.number(char);
                     return;
                 } else {
-                    return try self.addToken(.DOT);
+                    return try self.addToken(.dot);
                 }
             }
 
@@ -163,32 +163,32 @@ fn scanToken(self: *Lexer) LexerError!void {
                     try self.identifier();
                     return;
                 } else {
-                    return try self.addToken(.AT);
+                    return try self.addToken(.at);
                 }
             }
 
             return try self.addToken(switch (char) {
-                '+' => .PLUS,
-                '-' => .MINUS,
-                '*' => .ASTERISK,
-                ',' => .COMMA,
-                '|' => .PIPE,
-                ':' => .COLON,
-                '/' => if (self.match('/')) .SLASHSLASH else .SLASH,
-                '>' => if (self.match('=')) .GTEQ else .GT,
-                '<' => if (self.match('=')) .LTEQ else .LT,
-                '=' => if (self.match('=')) .EQEQ else if (self.match('>')) .ARROW else .EQ,
+                '+' => .plus,
+                '-' => .minus,
+                '*' => .asterisk,
+                ',' => .comma,
+                '|' => .pipe,
+                ':' => .colon,
+                '/' => if (self.match('/')) .slash_slash else .slash,
+                '>' => if (self.match('=')) .gt_eq else .gt,
+                '<' => if (self.match('=')) .lt_eq else .lt,
+                '=' => if (self.match('=')) .eq_eq else if (self.match('>')) .arrow else .eq,
                 '!' => if (self.match('='))
-                    (if (self.match('=')) .NOTEQEQ else .NOTEQ)
+                    (if (self.match('=')) .not_eq_eq else .not_eq)
                 else
-                    .BANG,
-                '(' => .LPAR,
-                ')' => .RPAR,
-                '[' => .LBRA,
-                ']' => .RBRA,
-                '{' => .LCUR,
-                '}' => .RCUR,
-                ';' => .SEMICOLON,
+                    .bang,
+                '(' => .lpar,
+                ')' => .rpar,
+                '[' => .lbra,
+                ']' => .rbra,
+                '{' => .lcur,
+                '}' => .rcur,
+                ';' => .semicolon,
                 else => unreachable,
             });
         },
@@ -206,7 +206,7 @@ fn scanToken(self: *Lexer) LexerError!void {
                 } else {
                     self.column += 1;
                 }
-            } else return LexerError.UNMATCHED_TOKEN;
+            } else return LexerError.UnmatchedToken;
         },
     }
 }
@@ -216,8 +216,8 @@ fn identifier(self: *Lexer) LexerError!void {
     const lower = try lowerOfString(self.allocator, self.source[self.start..self.current]);
     defer self.allocator.free(lower);
 
-    const tokenType = keywords.get(lower) orelse .IDENT;
-    try self.addToken(tokenType);
+    const token_type = keywords.get(lower) orelse .ident;
+    try self.addToken(token_type);
 }
 
 fn number(self: *Lexer, char: u8) LexerError!void {
@@ -225,15 +225,15 @@ fn number(self: *Lexer, char: u8) LexerError!void {
     while (!self.isAtEnd() and std.ascii.isDigit(self.peek())) self.skip();
 
     if (!self.isAtEnd() and self.peek() == '.') {
-        if (point) return LexerError.UNMATCHED_TOKEN;
+        if (point) return LexerError.UnmatchedToken;
         point = true;
         self.skip();
         while (!self.isAtEnd() and std.ascii.isDigit(self.peek())) self.skip();
     }
 
-    if (!self.isAtEnd() and self.peek() == '.') return LexerError.UNMATCHED_TOKEN;
+    if (!self.isAtEnd() and self.peek() == '.') return LexerError.UnmatchedToken;
 
-    try self.addToken(.NUMBER);
+    try self.addToken(.number);
 }
 
 fn string(self: *Lexer) LexerError!void {
@@ -243,17 +243,17 @@ fn string(self: *Lexer) LexerError!void {
         self.skip();
     }
 
-    if (self.isAtEnd() and self.source[self.current - 1] != '"') return LexerError.UNTERMINATED_STRING_LITERAL;
+    if (self.isAtEnd() and self.source[self.current - 1] != '"') return LexerError.UnterminatedStringLiteral;
 
     self.skip();
 
-    try self.addToken(.STRING);
+    try self.addToken(.string);
 
     self.line += height;
 }
 
 fn addToken(self: *Lexer, tp: TokenType) LexerError!void {
-    self.tokens.append(self.allocator, Token{ .type = tp, .lexeme = self.source[self.start..self.current], .location = Location{ .column = self.column, .line = self.line } }) catch return LexerError.OUT_OF_MEMORY;
+    self.tokens.append(self.allocator, Token{ .type = tp, .lexeme = self.source[self.start..self.current], .location = Location{ .column = self.column, .line = self.line } }) catch return LexerError.OutOfMemory;
     self.column += self.current - self.start;
 }
 
@@ -293,7 +293,7 @@ fn isValidIdentChar(char: u8) bool {
 }
 
 fn lowerOfString(allocator: std.mem.Allocator, str: []const u8) LexerError![]u8 {
-    var t = allocator.alloc(u8, str.len) catch return LexerError.OUT_OF_MEMORY;
+    var t = allocator.alloc(u8, str.len) catch return LexerError.OutOfMemory;
 
     for (str, 0..) |char, i| {
         t[i] = std.ascii.toLower(char);

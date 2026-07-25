@@ -1,10 +1,10 @@
 2 = (4 == 8)
 ---
-NUMBER ( 2 )
-EQ
-LPAR
-NUMBER ( 4 )
-EQEQ
-NUMBER ( 8 )
-RPAR
-EOF
+number ( 2 )
+eq
+lpar
+number ( 4 )
+eq_eq
+number ( 8 )
+rpar
+eof

@@ -1,20 +1,20 @@
 [x;[x;x*2] (x*x)] 2
 ---
-LBRA
-IDENT ( x )
-SEMICOLON
-LBRA
-IDENT ( x )
-SEMICOLON
-IDENT ( x )
-ASTERISK
-NUMBER ( 2 )
-RBRA
-LPAR
-IDENT ( x )
-ASTERISK
-IDENT ( x )
-RPAR
-RBRA
-NUMBER ( 2 )
-EOF
+lbra
+ident ( x )
+semicolon
+lbra
+ident ( x )
+semicolon
+ident ( x )
+asterisk
+number ( 2 )
+rbra
+lpar
+ident ( x )
+asterisk
+ident ( x )
+rpar
+rbra
+number ( 2 )
+eof

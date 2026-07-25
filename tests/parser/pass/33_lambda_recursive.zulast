@@ -4,7 +4,7 @@ Declaration ( @rec )
  Lambda ( x )
   Application
    Variable( @rec )
-   BinaryOperation( ADD )
+   BinaryOperation( add )
     Variable( x )
     Number( 1 )
  Application

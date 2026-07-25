@@ -11,28 +11,28 @@ const Repl = @This();
 io: std.Io,
 allocator: std.mem.Allocator,
 options: Options,
-sharedContext: SharedContext,
+shared_context: SharedContext,
 
 pub fn init(io: std.Io, allocator: std.mem.Allocator, options: Options) !Repl {
     return Repl{
         .io = io,
         .allocator = allocator,
         .options = options,
-        .sharedContext = try SharedContext.init(allocator, io, options),
+        .shared_context = try SharedContext.init(allocator, io, options),
     };
 }
 
 pub fn run(self: *Repl) !void {
-    var stdinBuffer: [4096]u8 = undefined;
-    var stdoutBuffer: [4096]u8 = undefined;
+    var std_in_buffer: [4096]u8 = undefined;
+    var std_out_buffer: [4096]u8 = undefined;
 
-    var stdinReader = std.Io.File.stdin().reader(self.io, &stdinBuffer);
-    const stdin = &stdinReader.interface;
+    var std_in_reader = std.Io.File.stdin().reader(self.io, &std_in_buffer);
+    const stdin = &std_in_reader.interface;
 
-    var stdoutWriter = std.Io.File.stdout().writer(self.io, &stdoutBuffer);
-    const stdout = &stdoutWriter.interface;
+    var std_out_writer = std.Io.File.stdout().writer(self.io, &std_out_buffer);
+    const stdout = &std_out_writer.interface;
 
-    defer self.sharedContext.deinit();
+    defer self.shared_context.deinit();
 
     try stdout.flush();
 
@@ -63,19 +63,19 @@ pub fn run(self: *Repl) !void {
 
         var arena = std.heap.ArenaAllocator.init(self.allocator);
 
-        const ret = self.sharedContext.pipeline.run(&self.sharedContext, "repl", line, self.options) catch {
+        const ret = self.shared_context.pipeline.run(&self.shared_context, "repl", line, self.options) catch {
             arena.deinit();
             continue;
         };
 
         if (ret) |r| {
             if (r.value) |val| {
-                const printedValue = Interpreter.printValue(arena.allocator(), val) catch {
+                const printed_value = Interpreter.printValue(arena.allocator(), val) catch {
                     arena.deinit();
                     continue;
                 };
 
-                try stdout.print("{s}\n", .{printedValue});
+                try stdout.print("{s}\n", .{printed_value});
                 try stdout.flush();
             }
         }

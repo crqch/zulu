@@ -2,7 +2,7 @@ f=[x;x*x];f (f 2)
 ---
 Declaration ( f )
  Lambda ( x )
-  BinaryOperation( MULTIPLY )
+  BinaryOperation( multiply )
    Variable( x )
    Variable( x )
  Application

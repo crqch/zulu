@@ -1,8 +1,8 @@
 [x;x*x+42]
 ---
 Lambda ( x )
- BinaryOperation( ADD )
-  BinaryOperation( MULTIPLY )
+ BinaryOperation( add )
+  BinaryOperation( multiply )
    Variable( x )
    Variable( x )
   Number( 42 )
