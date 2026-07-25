@@ -1,0 +1,7 @@
+type optional =
+    | Some of int
+    | None;
+match Some 2
+    | None => 0
+---
+MISSING_MATCH_CASE

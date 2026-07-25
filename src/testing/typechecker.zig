@@ -168,7 +168,7 @@ pub const Testing = struct {
         var typeChecker = TypeChecker.init(testAllocator, null);
         const parsedTp = try typeChecker.inferType(expr);
 
-        const printedTp = try TypeChecker.PrettyPrinter.prettyPrint(testAllocator, typeChecker.finalizeType(parsedTp).*);
+        const printedTp = try TypeChecker.PrettyPrinter.prettyPrint(testAllocator, typeChecker.finalizeType(parsedTp));
         const trimmedPrintedTp = std.mem.trim(u8, printedTp, " \n");
 
         if (std.mem.eql(u8, trimmedPrintedTp, trimmedExpectedTp)) {
@@ -281,7 +281,7 @@ pub const Testing = struct {
             }
         };
 
-        const printedTp = try TypeChecker.PrettyPrinter.prettyPrint(testAllocator, typeChecker.finalizeType(tp).*);
+        const printedTp = try TypeChecker.PrettyPrinter.prettyPrint(testAllocator, typeChecker.finalizeType(tp));
         const trimmedPrintedTp = std.mem.trim(u8, printedTp, " \n");
 
         const dup_path = try self.allocator.dupe(u8, filePath);

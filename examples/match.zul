@@ -1,19 +1,9 @@
-_=match 2,4
-    | a, b => a*b
-    | _ => 0
-;
-
-Optional *=
-    | Some . int
+type optional =
+    | Some of int
     | None
 ;
 
 some=Some 4;
-
-match some
-    | None => 0
-    | Some x => x
-;
 
 bind=[m f;
     match m
@@ -21,6 +11,6 @@ bind=[m f;
         | None   => None
 ];
 
-match bind (Some 42) [x;x - 19]
-    | None   => 0
+match bind (Some 42) [x;Some (x - 19)]
     | Some x => x
+    | None   => 0

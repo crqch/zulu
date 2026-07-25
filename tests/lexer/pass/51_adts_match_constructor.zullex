@@ -1,0 +1,17 @@
+match Some 2
+    | Some x => x
+    | None => 0
+---
+KW_MATCH
+IDENT ( Some )
+NUMBER ( 2 )
+PIPE
+IDENT ( Some )
+IDENT ( x )
+ARROW
+IDENT ( x )
+PIPE
+IDENT ( None )
+ARROW
+NUMBER ( 0 )
+EOF
