@@ -1067,10 +1067,10 @@ fn inferPattern(self: *TypeChecker, scope: *Scope, pattern: MatchPattern, seen_v
             const type_def = scope.getType(constructor.name) orelse return TypeError.UnboundConstructor;
             if (type_def.* != .variant) return TypeError.ExpectedConstructor;
 
-            if (type_def.variant.payload) |expectedPayload| {
-                if (constructor.payload) |actualPayloadAst| {
-                    const actual_payload_type = try self.inferPattern(scope, actualPayloadAst.*, seen_variables);
-                    try self.unifyTypes(expectedPayload, actual_payload_type);
+            if (type_def.variant.payload) |expected_payload| {
+                if (constructor.payload) |actual_payload_ast| {
+                    const actual_payload_type = try self.inferPattern(scope, actual_payload_ast.*, seen_variables);
+                    try self.unifyTypes(expected_payload, actual_payload_type);
                 } else {
                     return TypeError.MissingConstructorPayload;
                 }
