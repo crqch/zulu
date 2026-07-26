@@ -42,7 +42,7 @@ pub fn deinit(self: *Pipeline) void {
 }
 
 pub fn run(self: *Pipeline, shared_context: *SharedContext, file_path: []const u8, source: []const u8, options: Options) !?ReturnValue {
-    var lexer = try Lexer.init(self.allocator, source);
+    var lexer = try Lexer.init(self.allocator, shared_context, source);
     defer lexer.deinit();
 
     var type_checker = TypeChecker.init(self.type_arena.allocator(), shared_context);

@@ -722,7 +722,7 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
         .declaration => |declaration| {
             const block_scope = try self.freshScope(scope);
 
-            const identifier = try self.reallocateIdentifier(declaration.identifier);
+            const identifier = declaration.identifier;
 
             var explicit_type_optional: ?*Type = null;
 
@@ -774,7 +774,7 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
         .type_declaration => |type_declaration| {
             const block_scope = try self.freshScope(scope);
 
-            const identifier = try self.reallocateIdentifier(type_declaration.identifier);
+            const identifier = type_declaration.identifier;
 
             const ident_type = try self.makeFreshTypeSpecific(.{ .alias = .{
                 .name = identifier,
@@ -1031,19 +1031,12 @@ fn parseTypeAst(self: *TypeChecker, type_ast: TypeAst, scope: *Scope) TypeError!
         },
         .constructor => |constructor| {
             return self.makeFreshTypeSpecific(.{ .variant = .{
-                .name = try self.reallocateIdentifier(constructor.name),
+                .name = constructor.name,
                 .payload = if (constructor.payload) |payload| try self.parseTypeAst(payload.*, scope) else null,
                 .parent_union = null,
             } });
         },
     };
-}
-
-fn reallocateIdentifier(self: *TypeChecker, str: []const u8) TypeError![]const u8 {
-    if (self.shared_context) |sharedCtx| {
-        return sharedCtx.allocator.dupe(u8, str) catch return TypeError.OutOfMemory;
-    }
-    return str;
 }
 
 fn inferPattern(self: *TypeChecker, scope: *Scope, pattern: MatchPattern, seen_variables: *std.StringHashMap(void)) TypeError!*Type {

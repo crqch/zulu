@@ -153,7 +153,7 @@ pub const Testing = struct {
         const content = iterator.next() orelse return error.NO_CONTENT;
         errdefer std.log.debug("Evaluating content:\n{s}", .{content});
 
-        var lexer = try Lexer.init(test_allocator, content);
+        var lexer = try Lexer.init(test_allocator, null, content);
         _ = try lexer.scanTokens();
 
         const printed_tokens = try lexer.printTokens();
@@ -244,7 +244,7 @@ pub const Testing = struct {
         const content = iterator.next() orelse return error.NO_CONTENT;
         errdefer std.log.debug("Evaluating content:\n{s}", .{content});
 
-        var lexer = try Lexer.init(test_allocator, content);
+        var lexer = try Lexer.init(test_allocator, null, content);
 
         const expected_error = iterator.next() orelse return error.NO_EXPECTED_ERROR_CODE;
         const trimmed_error = std.mem.trim(u8, expected_error, " \n");

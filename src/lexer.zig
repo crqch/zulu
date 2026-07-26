@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Lexer = @This();
+const SharedContext = @import("./shared.zig");
 
 allocator: std.mem.Allocator,
 column: usize = 1,
@@ -9,6 +10,7 @@ line: usize = 1,
 source: []const u8,
 start: usize = 0,
 tokens: std.ArrayList(Token),
+shared_context: ?*SharedContext,
 
 const Location = struct { line: usize, column: usize };
 
@@ -88,12 +90,24 @@ const keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "of", .kw_of },
 });
 
-pub fn init(allocator: std.mem.Allocator, source: []const u8) !Lexer {
-    return Lexer{ .allocator = allocator, .tokens = std.ArrayList(Token).initCapacity(allocator, 0) catch return LexerError.OutOfMemory, .source = source };
+pub fn init(allocator: std.mem.Allocator, shared_context: ?*SharedContext, source: []const u8) !Lexer {
+    return Lexer{
+        .allocator = allocator,
+        .shared_context = shared_context,
+        .tokens = std.ArrayList(Token).initCapacity(allocator, 0) catch return LexerError.OutOfMemory,
+        .source = source,
+    };
 }
 
 pub fn deinit(self: *Lexer) void {
     self.tokens.deinit(self.allocator);
+}
+
+fn reallocateIdentifer(self: *Lexer, ident: []const u8) ![]const u8 {
+    if (self.shared_context) |shared_context| {
+        return try shared_context.allocator.dupe(u8, ident);
+    }
+    return ident;
 }
 
 pub fn scanTokens(self: *Lexer) LexerError![]Token {
@@ -218,6 +232,7 @@ fn identifier(self: *Lexer) LexerError!void {
 
     const token_type = keywords.get(lower) orelse .ident;
     try self.addToken(token_type);
+    try self.maintainToken();
 }
 
 fn number(self: *Lexer, char: u8) LexerError!void {
@@ -248,8 +263,20 @@ fn string(self: *Lexer) LexerError!void {
     self.skip();
 
     try self.addToken(.string);
+    try self.maintainToken();
 
     self.line += height;
+}
+
+fn maintainToken(self: *Lexer) !void {
+    if (self.tokens.pop()) |last_token| {
+        const new_lexeme = try self.reallocateIdentifer(last_token.lexeme);
+        try self.tokens.append(self.allocator, Token{
+            .type = last_token.type,
+            .lexeme = new_lexeme,
+            .location = last_token.location,
+        });
+    }
 }
 
 fn addToken(self: *Lexer, tp: TokenType) LexerError!void {
