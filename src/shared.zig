@@ -20,6 +20,12 @@ bindings: std.StringHashMap(ReturnType),
 io: std.Io,
 options: Options,
 pipeline: Pipeline,
+current_absolute_dir: []const u8,
+
+fn resolvePath(self: *SharedContext, relative_path: []const u8) ![]const u8 {
+    const resolved_path = try std.fs.path.resolve(self.allocator, &.{ self.current_absolute_dir, relative_path });
+    return try std.Io.Dir.cwd().realPathFileAlloc(self.io, resolved_path, self.allocator);
+}
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io, options: Options) !SharedContext {
     return SharedContext{
@@ -28,6 +34,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, options: Options) !SharedC
         .io = io,
         .options = options,
         .pipeline = Pipeline.init(allocator, options),
+        .current_absolute_dir = ".",
     };
 }
 
@@ -43,17 +50,22 @@ pub fn deinit(self: *SharedContext) void {
     self.pipeline.deinit();
 }
 
-pub fn load(self: *SharedContext, file_path: []const u8) !void {
-    const absolute_path = try std.Io.Dir.cwd().realPathFileAlloc(self.io, file_path, self.allocator);
+pub fn load(self: *SharedContext, relative_file_path: []const u8) !void {
+    const absolute_path = try self.resolvePath(relative_file_path);
+
     if (self.bindings.get(absolute_path)) |_| {
         self.allocator.free(absolute_path);
         return;
     }
 
-    const source = try readFileContents(self.allocator, self.io, file_path);
+    const source = try readFileContents(self.allocator, self.io, absolute_path);
     defer self.allocator.free(source);
 
-    const ret = try self.pipeline.run(self, file_path, source, self.options) orelse return error.Unexpected;
+    const new_scope_dir = std.fs.path.dirname(absolute_path) orelse ".";
+    const previous_path = self.current_absolute_dir;
+    self.current_absolute_dir = new_scope_dir;
+    const ret = try self.pipeline.run(self, absolute_path, source, self.options) orelse return error.Unexpected;
+    self.current_absolute_dir = previous_path;
 
     try self.bindings.put(absolute_path, ret);
 }
@@ -64,13 +76,14 @@ pub fn loadSource(self: *SharedContext, source: []const u8) !void {
     try self.bindings.put("_", ret);
 }
 
-pub fn get(self: *SharedContext, file_path: []const u8) !ReturnType {
-    if (std.mem.eql(u8, file_path, "_")) {
+pub fn get(self: *SharedContext, relative_file_path: []const u8) !ReturnType {
+    if (std.mem.eql(u8, relative_file_path, "_")) {
         if (self.bindings.get("_")) |ret| return ret;
 
         return error.FileNotFound;
     }
-    const absolute_path = try std.Io.Dir.cwd().realPathFileAlloc(self.io, file_path, self.allocator);
+
+    const absolute_path = try self.resolvePath(relative_file_path);
 
     if (self.bindings.get(absolute_path)) |ret| return ret;
     defer self.allocator.free(absolute_path);
