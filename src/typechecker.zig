@@ -858,11 +858,11 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
             var seen_constructors = std.StringHashMap(void).init(self.allocator);
             defer seen_constructors.deinit();
 
-            var seen_variables = std.StringHashMap(void).init(self.allocator);
-            defer seen_variables.deinit();
-
             for (match.cases) |case| {
                 const fresh_scope = try self.freshScope(scope);
+
+                var seen_variables = std.StringHashMap(void).init(self.allocator);
+                defer seen_variables.deinit();
                 const pattern_tp = try self.inferPattern(fresh_scope, case.pattern.*, &seen_variables);
 
                 self.unifyTypes(scrutinee_type, pattern_tp) catch {
