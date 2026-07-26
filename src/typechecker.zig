@@ -12,6 +12,15 @@ shared_context: ?*SharedContext,
 
 next_wildcard_id: usize,
 substitutions: std.AutoHashMap(usize, *Type),
+primitive_types: PrimitiveTypes,
+
+const PrimitiveTypes = struct {
+    unit: *Type,
+    int: *Type,
+    float: *Type,
+    string: *Type,
+    boolean: *Type,
+};
 
 pub const Type = union(enum) {
     wildcard: usize,
@@ -145,14 +154,26 @@ const TypeErrorContext = union(enum) {
     },
 };
 
+var global_unit_type: Type = .unit;
+var global_int_type: Type = .int;
+var global_float_type: Type = .float;
+var global_string_type: Type = .string;
+var global_boolean_type: Type = .boolean;
+
 pub fn init(allocator: std.mem.Allocator, shared_context: ?*SharedContext) TypeChecker {
     return TypeChecker{
         .allocator = allocator,
         .error_context = null,
         .shared_context = shared_context,
-
         .next_wildcard_id = 0,
         .substitutions = std.AutoHashMap(usize, *Type).init(allocator),
+        .primitive_types = PrimitiveTypes{
+            .int = &global_int_type,
+            .unit = &global_unit_type,
+            .float = &global_float_type,
+            .string = &global_string_type,
+            .boolean = &global_boolean_type,
+        },
     };
 }
 
@@ -160,11 +181,11 @@ fn freshScope(self: *TypeChecker, parent_scope: ?*Scope) !*Scope {
     const fresh_scope = try Scope.init(self.allocator, parent_scope);
 
     if (parent_scope == null) {
-        try fresh_scope.addType("bool", try self.makeFreshTypeSpecific(.boolean));
-        try fresh_scope.addType("int", try self.makeFreshTypeSpecific(.int));
-        try fresh_scope.addType("float", try self.makeFreshTypeSpecific(.float));
-        try fresh_scope.addType("string", try self.makeFreshTypeSpecific(.string));
-        try fresh_scope.addType("unit", try self.makeFreshTypeSpecific(.unit));
+        try fresh_scope.addType("int", self.primitive_types.int);
+        try fresh_scope.addType("bool", self.primitive_types.boolean);
+        try fresh_scope.addType("float", self.primitive_types.float);
+        try fresh_scope.addType("unit", self.primitive_types.unit);
+        try fresh_scope.addType("string", self.primitive_types.string);
     }
 
     return fresh_scope;
@@ -210,7 +231,7 @@ pub fn finalizeType(self: *TypeChecker, tp: *Type) *Type {
 }
 
 fn freshWildcard(self: *TypeChecker) !*Type {
-    const wildcard = try self.makeFreshTypeSpecific(.{ .wildcard = self.next_wildcard_id });
+    const wildcard = try self.freshType(.{ .wildcard = self.next_wildcard_id });
     self.next_wildcard_id += 1;
     return wildcard;
 }
@@ -364,14 +385,12 @@ pub const PrettyPrinter = struct {
     }
 };
 
-fn makeFreshType(self: *TypeChecker) !*Type {
-    return self.allocator.create(Type) catch {
-        return TypeError.OutOfMemory;
-    };
+pub fn freshType(self: *TypeChecker, tp: Type) !*Type {
+    return try freshTypeAllocator(self.allocator, tp);
 }
 
-fn makeFreshTypeSpecific(self: *TypeChecker, tp: Type) !*Type {
-    const fresh_type = self.allocator.create(Type) catch {
+fn freshTypeAllocator(allocator: std.mem.Allocator, tp: Type) !*Type {
+    const fresh_type = allocator.create(Type) catch {
         return TypeError.OutOfMemory;
     };
     fresh_type.* = tp;
@@ -379,20 +398,17 @@ fn makeFreshTypeSpecific(self: *TypeChecker, tp: Type) !*Type {
     return fresh_type;
 }
 
-fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeError!*Type {
+pub fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeError!*Type {
     switch (expression.*) {
         .unit => {
-            return try self.makeFreshTypeSpecific(.unit);
+            return self.primitive_types.unit;
         },
         .number => |number| {
-            const fresh_type = try self.makeFreshType();
             if (std.mem.containsAtLeast(u8, number, 1, ".")) {
-                fresh_type.* = .float;
+                return self.primitive_types.float;
             } else {
-                fresh_type.* = .int;
+                return self.primitive_types.int;
             }
-
-            return fresh_type;
         },
         .import => |file_path| {
             if (self.shared_context) |sc| {
@@ -427,14 +443,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
             return TypeError.UnboundConstructor;
         },
         .boolean => return {
-            const fresh_type = try self.makeFreshType();
-            fresh_type.* = .boolean;
-            return fresh_type;
+            return self.primitive_types.boolean;
         },
         .string => {
-            const fresh_type = try self.makeFreshType();
-            fresh_type.* = .string;
-            return fresh_type;
+            return self.primitive_types.string;
         },
         .tuple => |tuple| {
             var types = std.ArrayList(*Type).initCapacity(self.allocator, tuple.len) catch return TypeError.OutOfMemory;
@@ -443,18 +455,17 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
                 types.append(self.allocator, try self._inferType(expr, scope)) catch return TypeError.OutOfMemory;
             }
 
-            return try self.makeFreshTypeSpecific(.{ .tuple = types.items });
+            return try self.freshType(.{ .tuple = types.items });
         },
         .not => |not| {
-            const fresh_type = try self.makeFreshType();
             const tp = try self._inferType(not, scope);
 
-            const boolean_type = try self.makeFreshTypeSpecific(.boolean);
+            const boolean_type = self.primitive_types.boolean;
             self.unifyTypes(tp, boolean_type) catch {
                 self.error_context = .{
                     .unexpected_type = .{
                         .expected_type = self.allocator.dupe(*Type, &[_]*Type{
-                            try self.makeFreshTypeSpecific(.boolean),
+                            self.primitive_types.boolean,
                         }) catch {
                             return TypeError.OutOfMemory;
                         },
@@ -465,14 +476,13 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
                 return TypeError.UnexpectedType;
             };
 
-            fresh_type.* = .boolean;
-            return fresh_type;
+            return self.primitive_types.boolean;
         },
         .unary_minus => |unary_minus| {
             const tp = try self._inferType(unary_minus, scope);
 
-            const int_type = try self.makeFreshTypeSpecific(.int);
-            const float_type = try self.makeFreshTypeSpecific(.float);
+            const int_type = self.primitive_types.int;
+            const float_type = self.primitive_types.float;
 
             self.unifyTypes(tp, int_type) catch {
                 self.unifyTypes(tp, float_type) catch {
@@ -511,7 +521,7 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
             const arg_type = try self.freshWildcard();
             const return_type = try self.freshWildcard();
 
-            const lambda_type = try self.makeFreshTypeSpecific(.{ .lambda = .{
+            const lambda_type = try self.freshType(.{ .lambda = .{
                 .argument = arg_type,
                 .returns = return_type,
             } });
@@ -559,14 +569,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
 
             return switch (bop.operation) {
                 .add, .subtract, .divide, .multiply, .gt, .gt_eq, .lt, .lt_eq => {
-                    const int_type = try self.makeFreshTypeSpecific(.int);
-                    const float_type = try self.makeFreshTypeSpecific(.float);
-                    const string_type = try self.makeFreshTypeSpecific(.string);
-
-                    self.unifyTypes(left_type, int_type) catch {
-                        self.unifyTypes(left_type, float_type) catch {
+                    self.unifyTypes(left_type, self.primitive_types.int) catch {
+                        self.unifyTypes(left_type, self.primitive_types.float) catch {
                             if (bop.operation == .add) {
-                                self.unifyTypes(left_type, string_type) catch {};
+                                self.unifyTypes(left_type, self.primitive_types.string) catch {};
                             }
                         };
                     };
@@ -577,10 +583,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
                         self.error_context = TypeErrorContext{
                             .unexpected_type = .{
                                 .expected_type = self.allocator.dupe(*Type, if (bop.operation == .add) &[_]*Type{
-                                    int_type,
-                                    float_type,
-                                    string_type,
-                                } else &[_]*Type{ int_type, float_type }) catch return TypeError.OutOfMemory,
+                                    self.primitive_types.int,
+                                    self.primitive_types.float,
+                                    self.primitive_types.string,
+                                } else &[_]*Type{ self.primitive_types.int, self.primitive_types.float }) catch return TypeError.OutOfMemory,
                                 .found_type = left_type,
                                 .context = bop.left,
                             },
@@ -617,8 +623,7 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
                     // return left_type;
 
                     if (bop.operation == .gt or bop.operation == .gt_eq or bop.operation == .lt or bop.operation == .lt_eq) {
-                        const fresh_type = try self.makeFreshTypeSpecific(.boolean);
-                        return fresh_type;
+                        return self.primitive_types.boolean;
                     }
                     return left_type;
                 },
@@ -630,10 +635,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
                         self.error_context = TypeErrorContext{
                             .unexpected_type = .{
                                 .expected_type = self.allocator.dupe(*Type, &[_]*Type{
-                                    try self.makeFreshTypeSpecific(.boolean),
-                                    try self.makeFreshTypeSpecific(.float),
-                                    try self.makeFreshTypeSpecific(.int),
-                                    try self.makeFreshTypeSpecific(.string),
+                                    self.primitive_types.boolean,
+                                    self.primitive_types.float,
+                                    self.primitive_types.int,
+                                    self.primitive_types.string,
                                 }) catch {
                                     return TypeError.OutOfMemory;
                                 },
@@ -644,19 +649,14 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
                         return TypeError.UnexpectedType;
                     }
 
-                    const fresh_type = try self.makeFreshType();
-                    fresh_type.* = .boolean;
-
-                    return fresh_type;
+                    return self.primitive_types.boolean;
                 },
 
                 .and_op, .or_op => {
-                    const fresh_type = try self.makeFreshType();
-                    fresh_type.* = .boolean;
-                    self.unifyTypes(left_type, fresh_type) catch {
+                    self.unifyTypes(left_type, self.primitive_types.boolean) catch {
                         self.error_context = TypeErrorContext{
                             .unexpected_type = .{
-                                .expected_type = self.allocator.dupe(*Type, &[_]*Type{fresh_type}) catch {
+                                .expected_type = self.allocator.dupe(*Type, &[_]*Type{self.primitive_types.boolean}) catch {
                                     return TypeError.OutOfMemory;
                                 },
                                 .found_type = left_type,
@@ -665,10 +665,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
                         };
                         return TypeError.UnexpectedType;
                     };
-                    self.unifyTypes(right_type, fresh_type) catch {
+                    self.unifyTypes(right_type, self.primitive_types.boolean) catch {
                         self.error_context = TypeErrorContext{
                             .unexpected_type = .{
-                                .expected_type = self.allocator.dupe(*Type, &[_]*Type{fresh_type}) catch {
+                                .expected_type = self.allocator.dupe(*Type, &[_]*Type{self.primitive_types.boolean}) catch {
                                     return TypeError.OutOfMemory;
                                 },
                                 .found_type = right_type,
@@ -688,11 +688,10 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
         },
         .condition => |condition| {
             const condition_type = try self._inferType(condition.expression, scope);
-            var boolean_type = Type{ .boolean = {} };
-            self.unifyTypes(condition_type, &boolean_type) catch {
+            self.unifyTypes(condition_type, self.primitive_types.boolean) catch {
                 self.error_context = TypeErrorContext{ .unexpected_type = .{
                     .expected_type = self.allocator.dupe(*Type, &[_]*Type{
-                        try self.makeFreshTypeSpecific(.boolean),
+                        self.primitive_types.boolean,
                     }) catch {
                         return TypeError.OutOfMemory;
                     },
@@ -776,7 +775,7 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
 
             const identifier = type_declaration.identifier;
 
-            const ident_type = try self.makeFreshTypeSpecific(.{ .alias = .{
+            const ident_type = try self.freshType(.{ .alias = .{
                 .name = identifier,
                 .underlying = try self.freshWildcard(),
             } });
@@ -817,7 +816,7 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
                     try block_scope.addType(parsed_type.variant.name, parsed_type);
                 }
 
-                explicit_type = try self.makeFreshTypeSpecific(.{ .union_of = types.items });
+                explicit_type = try self.freshType(.{ .union_of = types.items });
             }
             ident_type.alias.underlying = explicit_type.?;
 
@@ -835,7 +834,7 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
 
             const body_type = try self._inferType(lambda.block, closure_environment);
 
-            const lambda_type = try self.makeFreshTypeSpecific(.{ .lambda = .{
+            const lambda_type = try self.freshType(.{ .lambda = .{
                 .argument = argument_type,
                 .returns = body_type,
             } });
@@ -942,12 +941,12 @@ fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) TypeEr
                 return TypeError.ShadowingByModuleNotAllowed;
             }
 
-            try scope.addValue(module.identifier, try self.makeFreshTypeSpecific(.{ .scope = tp.scope }));
+            try scope.addValue(module.identifier, try self.freshType(.{ .scope = tp.scope }));
 
             return try self._inferType(module.rest, scope);
         },
         .current_environment => {
-            return try self.makeFreshTypeSpecific(.{ .scope = scope });
+            return try self.freshType(.{ .scope = scope });
         },
         .use_environment => |env| {
             const type_scope = try self._inferType(env.environment, scope);
@@ -1021,16 +1020,16 @@ fn parseTypeAst(self: *TypeChecker, type_ast: TypeAst, scope: *Scope) TypeError!
                 elements.append(self.allocator, try self.parseTypeAst(it.*, scope)) catch return TypeError.OutOfMemory;
             }
 
-            return try self.makeFreshTypeSpecific(.{ .tuple = elements.items });
+            return try self.freshType(.{ .tuple = elements.items });
         },
         .function => |function| {
-            return self.makeFreshTypeSpecific(.{ .lambda = .{
+            return self.freshType(.{ .lambda = .{
                 .argument = try self.parseTypeAst(function.argument.*, scope),
                 .returns = try self.parseTypeAst(function.returns.*, scope),
             } });
         },
         .constructor => |constructor| {
-            return self.makeFreshTypeSpecific(.{ .variant = .{
+            return self.freshType(.{ .variant = .{
                 .name = constructor.name,
                 .payload = if (constructor.payload) |payload| try self.parseTypeAst(payload.*, scope) else null,
                 .parent_union = null,
@@ -1054,7 +1053,7 @@ fn inferPattern(self: *TypeChecker, scope: *Scope, pattern: MatchPattern, seen_v
             for (tuple.binds) |pat| {
                 types.append(self.allocator, try self.inferPattern(scope, pat.*, seen_variables)) catch return TypeError.OutOfMemory;
             }
-            return try self.makeFreshTypeSpecific(.{ .tuple = types.items });
+            return try self.freshType(.{ .tuple = types.items });
         },
         .constructor => |constructor| {
             const type_def = scope.getType(constructor.name) orelse return TypeError.UnboundConstructor;
@@ -1141,14 +1140,14 @@ fn freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Ty
         .lambda => |lambda| {
             const fresh_argument = try self.freshenType(lambda.argument, cache);
             const fresh_returns = try self.freshenType(lambda.returns, cache);
-            return try self.makeFreshTypeSpecific(.{ .lambda = .{ .argument = fresh_argument, .returns = fresh_returns } });
+            return try self.freshType(.{ .lambda = .{ .argument = fresh_argument, .returns = fresh_returns } });
         },
         .tuple => |tuple| {
             const fresh_types = self.allocator.alloc(*Type, tuple.len) catch return TypeError.OutOfMemory;
             for (tuple, 0..) |t, i| {
                 fresh_types[i] = try self.freshenType(t, cache);
             }
-            return try self.makeFreshTypeSpecific(.{ .tuple = fresh_types });
+            return try self.freshType(.{ .tuple = fresh_types });
         },
         .scope => |scope| {
             const fresh_scope = try self.freshScope(scope.parent);
@@ -1164,13 +1163,13 @@ fn freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Ty
                 try fresh_scope.addType(entry.key_ptr.*, fresh_type);
             }
 
-            return try self.makeFreshTypeSpecific(.{ .scope = fresh_scope });
+            return try self.freshType(.{ .scope = fresh_scope });
         },
         .alias => {
             return resolved;
         },
         .variant => |variant| {
-            return try self.makeFreshTypeSpecific(.{ .variant = .{
+            return try self.freshType(.{ .variant = .{
                 .name = variant.name,
                 .payload = if (variant.payload) |payload| try self.freshenType(payload, cache) else null,
                 .parent_union = variant.parent_union,
@@ -1181,13 +1180,13 @@ fn freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Ty
             for (un, 0..) |t, i| {
                 fresh_types[i] = try self.freshenType(t, cache);
             }
-            return try self.makeFreshTypeSpecific(.{ .union_of = fresh_types });
+            return try self.freshType(.{ .union_of = fresh_types });
         },
         else => return resolved,
     }
 }
 
-fn unifyTypes(self: *TypeChecker, raw_left: *Type, raw_right: *Type) TypeError!void {
+pub fn unifyTypes(self: *TypeChecker, raw_left: *Type, raw_right: *Type) TypeError!void {
     const left = self.applySubstitutions(raw_left);
     const right = self.applySubstitutions(raw_right);
 
