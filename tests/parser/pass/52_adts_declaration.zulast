@@ -14,15 +14,15 @@ type node =
 TypeDeclaration ( a : int )
  TypeDeclaration ( b : float )
   TypeDeclaration ( optional :
-   Some of int
-   None
+   #Some of int
+   #None
   )
    TypeDeclaration ( node :
-    Unit
-    Int of int
-    Float of float
-    String of string
-    Bool of bool
-    BinOp of (bop * node * node)
+    #Unit
+    #Int of int
+    #Float of float
+    #String of string
+    #Bool of bool
+    #BinOp of (bop * node * node)
    )
     CurrentEnvironment
