@@ -1206,25 +1206,38 @@ fn occursInType(self: *TypeChecker, wildcard_id: usize, tp: *Type) bool {
     return self._occursInType(wildcard_id, tp, &visited);
 }
 
-fn freshenScope(self: *TypeChecker, scope: *Scope, cache: *std.AutoHashMap(usize, *Type)) TypeError!*Scope {
-    const fresh_parent = if (scope.parent) |p| (if (p.parent == null) p else try self.freshenScope(p, cache)) else null;
+pub fn freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Type)) TypeError!*Type {
+    var scope_cache = std.AutoHashMap(*Scope, *Scope).init(self.allocator);
+    defer scope_cache.deinit();
+
+    return try self._freshenType(tp, cache, &scope_cache);
+}
+
+fn _freshenScope(self: *TypeChecker, scope: *Scope, cache: *std.AutoHashMap(usize, *Type), scope_cache: *std.AutoHashMap(*Scope, *Scope)) TypeError!*Scope {
+    if (scope_cache.get(scope)) |existing| {
+        return existing;
+    }
+
+    const fresh_parent = if (scope.parent) |p| (if (p.parent == null) p else try self._freshenScope(p, cache, scope_cache)) else null;
     const fresh_scope = try Scope.init(self.allocator, fresh_parent);
+    scope_cache.put(scope, fresh_scope) catch return TypeError.OutOfMemory;
+
     var it_values = scope.values.iterator();
     while (it_values.next()) |entry| {
-        const fresh_val = try self.freshenType(entry.value_ptr.*, cache);
+        const fresh_val = try self._freshenType(entry.value_ptr.*, cache, scope_cache);
         try fresh_scope.addValue(entry.key_ptr.*, fresh_val);
     }
 
     var it_types = scope.types.iterator();
     while (it_types.next()) |entry| {
-        const fresh_type = try self.freshenType(entry.value_ptr.*, cache);
+        const fresh_type = try self._freshenType(entry.value_ptr.*, cache, scope_cache);
         try fresh_scope.addType(entry.key_ptr.*, fresh_type);
     }
 
     return fresh_scope;
 }
 
-fn freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Type)) TypeError!*Type {
+fn _freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Type), scope_cache: *std.AutoHashMap(*Scope, *Scope)) TypeError!*Type {
     const resolved = self.applySubstitutions(tp);
     switch (resolved.*) {
         .wildcard => |id| {
@@ -1236,19 +1249,19 @@ fn freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Ty
             return fresh_wildcard;
         },
         .lambda => |lambda| {
-            const fresh_argument = try self.freshenType(lambda.argument, cache);
-            const fresh_returns = try self.freshenType(lambda.returns, cache);
+            const fresh_argument = try self._freshenType(lambda.argument, cache, scope_cache);
+            const fresh_returns = try self._freshenType(lambda.returns, cache, scope_cache);
             return try self.freshType(.{ .lambda = .{ .argument = fresh_argument, .returns = fresh_returns } });
         },
         .tuple => |tuple| {
             const fresh_types = self.allocator.alloc(*Type, tuple.len) catch return TypeError.OutOfMemory;
             for (tuple, 0..) |t, i| {
-                fresh_types[i] = try self.freshenType(t, cache);
+                fresh_types[i] = try self._freshenType(t, cache, scope_cache);
             }
             return try self.freshType(.{ .tuple = fresh_types });
         },
         .scope => |scope| {
-            const fresh_scope = try self.freshenScope(scope, cache);
+            const fresh_scope = try self._freshenScope(scope, cache, scope_cache);
             return try self.freshType(.{ .scope = fresh_scope });
         },
         .alias => {
@@ -1257,14 +1270,14 @@ fn freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Ty
         .variant => |variant| {
             return try self.freshType(.{ .variant = .{
                 .name = variant.name,
-                .payload = if (variant.payload) |payload| try self.freshenType(payload, cache) else null,
+                .payload = if (variant.payload) |payload| try self._freshenType(payload, cache, scope_cache) else null,
                 .parent_union = variant.parent_union,
             } });
         },
         .union_of => |un| {
             const fresh_types = self.allocator.alloc(*Type, un.len) catch return TypeError.OutOfMemory;
             for (un, 0..) |t, i| {
-                fresh_types[i] = try self.freshenType(t, cache);
+                fresh_types[i] = try self._freshenType(t, cache, scope_cache);
             }
             return try self.freshType(.{ .union_of = fresh_types });
         },
