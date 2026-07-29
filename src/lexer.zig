@@ -72,6 +72,7 @@ pub const Token = struct { type: TokenType, lexeme: []const u8, location: Locati
 pub const LexerError = error{
     UnmatchedToken,
     UnterminatedStringLiteral,
+    UnterminatedIdentLiteral,
     OutOfMemory,
 };
 
@@ -173,7 +174,7 @@ fn scanToken(self: *Lexer) LexerError!void {
             }
 
             if (char == '@') {
-                if (!self.isAtEnd() and isValidIdentChar(self.peek())) {
+                if (!self.isAtEnd() and (isValidIdentChar(self.peek()) or self.peek() == '"')) {
                     try self.identifier();
                     return;
                 } else {
@@ -226,7 +227,14 @@ fn scanToken(self: *Lexer) LexerError!void {
 }
 
 fn identifier(self: *Lexer) LexerError!void {
-    while (!self.isAtEnd() and (isValidIdentChar(self.peek()) or std.ascii.isDigit(self.peek()))) self.skip();
+    if (self.peek() == '"') {
+        self.skip();
+        while (!self.isAtEnd() and self.peek() != '"' and self.peek() != '\n') self.skip();
+        if (self.isAtEnd() or self.source[self.current] != '"') return LexerError.UnterminatedIdentLiteral;
+        self.skip();
+    } else {
+        while (!self.isAtEnd() and (isValidIdentChar(self.peek()) or std.ascii.isDigit(self.peek()))) self.skip();
+    }
     const lower = try lowerOfString(self.allocator, self.source[self.start..self.current]);
     defer self.allocator.free(lower);
 

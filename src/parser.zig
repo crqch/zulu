@@ -328,18 +328,25 @@ fn stringNud(self: *Parser) ParserError!*Expression {
 }
 
 fn identNud(self: *Parser) ParserError!*Expression {
-    const first_char = self.previousToken().lexeme[0];
+    const lexeme = self.previousToken().lexeme;
+    const first_char = lexeme[0];
     if (first_char >= 'A' and first_char <= 'Z') {
         return try self.newExpression(Expression{
             .constructor = .{
-                .name = self.previousToken().lexeme,
+                .name = lexeme,
                 .payload = null,
             },
         });
     }
 
+    if (first_char == '@' and lexeme.len > 1 and lexeme[1] == '"') {
+        return try self.newExpression(Expression{
+            .variable = lexeme[2 .. lexeme.len - 1],
+        });
+    }
+
     return try self.newExpression(Expression{
-        .variable = self.previousToken().lexeme,
+        .variable = lexeme,
     });
 }
 
