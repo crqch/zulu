@@ -175,7 +175,7 @@ pub const AstPrinter = struct {
                 var buffer = try std.ArrayList(u8).initCapacity(self.allocator, 0);
                 if (level > 25) try buffer.print(self.allocator, "(", .{});
 
-                try buffer.print(self.allocator, "{s}", .{constructor.name});
+                try buffer.print(self.allocator, "#{s}", .{constructor.name});
                 if (constructor.payload) |payload| {
                     try buffer.print(self.allocator, " of {s}", .{try self.printType(payload.*, 26)});
                 }

@@ -17,8 +17,8 @@ env {
 	types {
 		unit: unit
 		float: float
-		int: int
 		bool: bool
+		int: int
 		string: string
 		a: a
 		b: b

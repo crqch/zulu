@@ -94,6 +94,7 @@ fn nud(self: *Parser) ParserError!*Expression {
         .number => self.numberNud(),
         .string => self.stringNud(),
         .ident => self.identNud(),
+        .at => self.identNud(),
         .kw_true, .kw_false => self.boolNud(),
         .minus => self.unaryMinusNud(),
         .bang => self.notNud(),
@@ -101,7 +102,7 @@ fn nud(self: *Parser) ParserError!*Expression {
         .lbra => self.lambdaNud(),
         .kw_if => self.ifNud(),
         .kw_match => self.matchNud(),
-        .kw_mod => self.moduleNud(),
+        .kw_module => self.moduleNud(),
         .kw_type => self.typeNud(),
         .kw_import => self.importNud(),
         .kw_env => self.envNud(),
@@ -328,18 +329,17 @@ fn stringNud(self: *Parser) ParserError!*Expression {
 }
 
 fn identNud(self: *Parser) ParserError!*Expression {
-    const first_char = self.previousToken().lexeme[0];
-    if (first_char >= 'A' and first_char <= 'Z') {
+    const lexeme = self.previousToken().lexeme;
+    const first_char = lexeme[0];
+
+    if (first_char == '@' and lexeme.len > 1 and lexeme[1] == '"') {
         return try self.newExpression(Expression{
-            .constructor = .{
-                .name = self.previousToken().lexeme,
-                .payload = null,
-            },
+            .variable = lexeme[2 .. lexeme.len - 1],
         });
     }
 
     return try self.newExpression(Expression{
-        .variable = self.previousToken().lexeme,
+        .variable = lexeme,
     });
 }
 
@@ -473,8 +473,12 @@ fn memberAccessLed(self: *Parser, left: *Expression, min_bp: u8) ParserError!*Ex
 fn applicationLed(self: *Parser, left: *Expression) ParserError!*Expression {
     const right = try self.parseExpression(Precedence.call + 1);
 
-    if (left.* == .constructor) {
-        left.constructor.payload = right;
+    if (left.* == .variable and std.ascii.isUpper(left.variable[0])) {
+        const name = left.variable;
+        left.* = .{ .constructor = .{
+            .name = name,
+            .payload = right,
+        } };
 
         return left;
     }
@@ -689,7 +693,7 @@ fn isAtPrimaryStart(self: *Parser) bool {
         token_type == .ident or
         token_type == .kw_type or
         token_type == .kw_env or
-        token_type == .kw_mod;
+        token_type == .kw_module;
 }
 
 fn previousToken(self: *Parser) Token {

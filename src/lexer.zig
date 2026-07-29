@@ -35,7 +35,6 @@ pub const TokenType = enum {
     lt_eq,
     not_eq_eq,
     eq_eq,
-    slash_slash,
 
     arrow,
 
@@ -58,7 +57,7 @@ pub const TokenType = enum {
     kw_if,
     kw_else,
     kw_match,
-    kw_mod,
+    kw_module,
     kw_type,
     kw_import,
     kw_of,
@@ -72,6 +71,7 @@ pub const Token = struct { type: TokenType, lexeme: []const u8, location: Locati
 pub const LexerError = error{
     UnmatchedToken,
     UnterminatedStringLiteral,
+    UnterminatedIdentLiteral,
     OutOfMemory,
 };
 
@@ -83,7 +83,7 @@ const keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "if", .kw_if },
     .{ "else", .kw_else },
     .{ "match", .kw_match },
-    .{ "mod", .kw_mod },
+    .{ "module", .kw_module },
     .{ "type", .kw_type },
     .{ "import", .kw_import },
     .{ "@env", .kw_env },
@@ -173,12 +173,20 @@ fn scanToken(self: *Lexer) LexerError!void {
             }
 
             if (char == '@') {
-                if (!self.isAtEnd() and isValidIdentChar(self.peek())) {
+                if (!self.isAtEnd() and (isValidIdentChar(self.peek()) or self.peek() == '"')) {
                     try self.identifier();
                     return;
                 } else {
                     return try self.addToken(.at);
                 }
+            }
+
+            if (char == '/') {
+                if (self.match('/')) {
+                    while (!self.isAtEnd() and self.peek() != '\n') self.skip();
+                    return;
+                }
+                return try self.addToken(.slash);
             }
 
             return try self.addToken(switch (char) {
@@ -188,7 +196,6 @@ fn scanToken(self: *Lexer) LexerError!void {
                 ',' => .comma,
                 '|' => .pipe,
                 ':' => .colon,
-                '/' => if (self.match('/')) .slash_slash else .slash,
                 '>' => if (self.match('=')) .gt_eq else .gt,
                 '<' => if (self.match('=')) .lt_eq else .lt,
                 '=' => if (self.match('=')) .eq_eq else if (self.match('>')) .arrow else .eq,
@@ -226,7 +233,14 @@ fn scanToken(self: *Lexer) LexerError!void {
 }
 
 fn identifier(self: *Lexer) LexerError!void {
-    while (!self.isAtEnd() and (isValidIdentChar(self.peek()) or std.ascii.isDigit(self.peek()))) self.skip();
+    if (self.peek() == '"') {
+        self.skip();
+        while (!self.isAtEnd() and self.peek() != '"' and self.peek() != '\n') self.skip();
+        if (self.isAtEnd() or self.source[self.current] != '"') return LexerError.UnterminatedIdentLiteral;
+        self.skip();
+    } else {
+        while (!self.isAtEnd() and (isValidIdentChar(self.peek()) or std.ascii.isDigit(self.peek()))) self.skip();
+    }
     const lower = try lowerOfString(self.allocator, self.source[self.start..self.current]);
     defer self.allocator.free(lower);
 
@@ -249,6 +263,7 @@ fn number(self: *Lexer, char: u8) LexerError!void {
     if (!self.isAtEnd() and self.peek() == '.') return LexerError.UnmatchedToken;
 
     try self.addToken(.number);
+    try self.maintainToken();
 }
 
 fn string(self: *Lexer) LexerError!void {

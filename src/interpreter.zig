@@ -5,6 +5,7 @@ const MatchPattern = @import("./ast.zig").MatchPattern;
 const Bop = @import("./ast.zig").Bop;
 const TypeChecker = @import("./typechecker.zig");
 const SharedContext = @import("./shared.zig");
+const BuiltIn = @import("./builtin.zig");
 const readFileContents = @import("./root.zig").readFileContents;
 
 allocator: std.mem.Allocator,
@@ -65,6 +66,49 @@ const Env = struct {
     }
 };
 
+fn freshEnv(self: *Interpreter, parent_env: ?*Env) !*Env {
+    const fresh_env = try Env.init(self.allocator, parent_env);
+
+    if (parent_env == null) {
+        { // math builtins
+            try fresh_env.add("<@math.mod>", try self.makeValue(.{ .builtin = BuiltIn.math.mod.interp }));
+
+            try fresh_env.add("<@math.sin>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.sin) }));
+            try fresh_env.add("<@math.cos>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.cos) }));
+            try fresh_env.add("<@math.tan>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.tan) }));
+
+            try fresh_env.add("<@math.asin>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.asin) }));
+            try fresh_env.add("<@math.acos>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.acos) }));
+            try fresh_env.add("<@math.atan>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.atan) }));
+
+            try fresh_env.add("<@math.sinh>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.sinh) }));
+            try fresh_env.add("<@math.cosh>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.cosh) }));
+            try fresh_env.add("<@math.tanh>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.tanh) }));
+
+            try fresh_env.add("<@math.asinh>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.asinh) }));
+            try fresh_env.add("<@math.acosh>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.acosh) }));
+            try fresh_env.add("<@math.atanh>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.atanh) }));
+
+            try fresh_env.add("<@math.log2>", try self.makeValue(.{ .builtin = BuiltIn.math.logX.interp(2) }));
+            try fresh_env.add("<@math.log10>", try self.makeValue(.{ .builtin = BuiltIn.math.logX.interp(10) }));
+
+            try fresh_env.add("<@math.log>", try self.makeValue(.{ .builtin = BuiltIn.math.log.interp }));
+
+            try fresh_env.add("<@math.sqrt>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.sqrt) }));
+            try fresh_env.add("<@math.cbrt>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.cbrt) }));
+
+            try fresh_env.add("<@math.round>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.round) }));
+            try fresh_env.add("<@math.floor>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.floor) }));
+            try fresh_env.add("<@math.ceil>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.ceil) }));
+            try fresh_env.add("<@math.trunc>", try self.makeValue(.{ .builtin = BuiltIn.math.Generic.oneFloatToFloat(std.math.trunc) }));
+
+            try fresh_env.add("<@math.gcd>", try self.makeValue(.{ .builtin = BuiltIn.math.gcd.interp }));
+        }
+    }
+
+    return fresh_env;
+}
+
 const ValueType = enum {
     unit,
     boolean,
@@ -75,6 +119,7 @@ const ValueType = enum {
     variant,
 
     closure,
+    builtin,
 
     tuple,
     environment,
@@ -97,7 +142,7 @@ pub const Value = union(ValueType) {
         node: *Expression,
         env: *Env,
     },
-
+    builtin: *const fn (*Interpreter, *Value) InterpreterError!*Value,
     tuple: []*Value,
     environment: *Env,
 };
@@ -122,10 +167,11 @@ pub fn printValue(allocator: std.mem.Allocator, value: *Value) ![]const u8 {
 
             return str.items;
         },
+        .builtin => "builtin",
         .closure => |closure| try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, closure.node.lambda.inferred_type.?)}),
         .variant => |variant| {
             if (variant.payload) |payload| {
-                return try std.fmt.allocPrint(allocator, "{s} ({s})", .{ variant.name, try printValue(allocator, payload) });
+                return try std.fmt.allocPrint(allocator, "{s} {s}", .{ variant.name, try printValue(allocator, payload) });
             } else {
                 return try std.fmt.allocPrint(allocator, "{s}", .{variant.name});
             }
@@ -158,7 +204,7 @@ pub fn printValue(allocator: std.mem.Allocator, value: *Value) ![]const u8 {
 }
 
 pub fn eval(self: *Interpreter, expression: *Expression) !*Value {
-    const env = try Env.init(self.allocator, null);
+    const env = try self.freshEnv(null);
 
     return try self._eval(expression, env);
 }
@@ -186,7 +232,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             }
 
             // TODO: Add other number bases
-            const int = std.fmt.parseInt(i32, number, 10) catch {
+            const int = std.fmt.parseInt(i64, number, 10) catch {
                 return InterpreterError.IntParsingFailed;
             };
             return try self.makeValue(.{ .integer = int });
@@ -270,7 +316,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             var block_environment = try Env.init(self.allocator, environment);
 
             const identifier = try self.reallocateIdentifier(declaration.identifier);
-            const evaluated_expression = try self._eval(declaration.expression, if (declaration.identifier[0] == '@') block_environment else environment);
+            const evaluated_expression = try self._eval(declaration.expression, if (declaration.expression.* == .lambda or declaration.identifier[0] == '@') block_environment else environment);
 
             try block_environment.add(identifier, evaluated_expression);
 
@@ -283,12 +329,18 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             const evaluated_callee = try self._eval(application.callee, environment);
             const evaluated_value = try self._eval(application.value, environment);
 
-            const closure = evaluated_callee.closure;
-            const closure_environment = try Env.init(self.allocator, closure.env);
-
-            try closure_environment.add(closure.node.lambda.identifier, evaluated_value);
-
-            return try self._eval(closure.node.lambda.block, closure_environment);
+            switch (evaluated_callee.*) {
+                .closure => |closure| {
+                    const closure_environment = try Env.init(self.allocator, closure.env);
+                    try closure_environment.add(closure.node.lambda.identifier, evaluated_value);
+                    try closure_environment.add("@", evaluated_callee);
+                    return try self._eval(closure.node.lambda.block, closure_environment);
+                },
+                .builtin => |builtin_fn| {
+                    return try builtin_fn(self, evaluated_value);
+                },
+                else => unreachable,
+            }
         },
         .condition => |condition| {
             const condition_expression = try self._eval(condition.expression, environment);
@@ -437,7 +489,7 @@ fn reallocateIdentifier(self: *Interpreter, str: []const u8) InterpreterError![]
     return self.shared_context.allocator.dupe(u8, str) catch return InterpreterError.MemoryAllocationFailed;
 }
 
-fn makeValue(self: *Interpreter, value: Value) InterpreterError!*Value {
+pub fn makeValue(self: *Interpreter, value: Value) InterpreterError!*Value {
     const fresh_value = self.allocator.create(Value) catch return InterpreterError.MemoryAllocationFailed;
 
     fresh_value.* = value;
@@ -500,6 +552,8 @@ fn matchesPattern(self: *Interpreter, pattern: MatchPattern, value: *Value) Inte
 pub const InterpreterError = error{
     FloatParsingFailed,
     IntParsingFailed,
+
+    NegativeNumbersInGCD,
 
     MemoryAllocationFailed,
 
