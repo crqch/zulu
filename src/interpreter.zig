@@ -171,7 +171,7 @@ pub fn printValue(allocator: std.mem.Allocator, value: *Value) ![]const u8 {
         .closure => |closure| try std.fmt.allocPrint(allocator, "[{s}]", .{try TypeChecker.PrettyPrinter.prettyPrint(allocator, closure.node.lambda.inferred_type.?)}),
         .variant => |variant| {
             if (variant.payload) |payload| {
-                return try std.fmt.allocPrint(allocator, "{s} ({s})", .{ variant.name, try printValue(allocator, payload) });
+                return try std.fmt.allocPrint(allocator, "{s} {s}", .{ variant.name, try printValue(allocator, payload) });
             } else {
                 return try std.fmt.allocPrint(allocator, "{s}", .{variant.name});
             }
