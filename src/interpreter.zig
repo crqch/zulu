@@ -232,7 +232,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             }
 
             // TODO: Add other number bases
-            const int = std.fmt.parseInt(i32, number, 10) catch {
+            const int = std.fmt.parseInt(i64, number, 10) catch {
                 return InterpreterError.IntParsingFailed;
             };
             return try self.makeValue(.{ .integer = int });

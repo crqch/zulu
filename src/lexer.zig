@@ -257,6 +257,7 @@ fn number(self: *Lexer, char: u8) LexerError!void {
     if (!self.isAtEnd() and self.peek() == '.') return LexerError.UnmatchedToken;
 
     try self.addToken(.number);
+    try self.maintainToken();
 }
 
 fn string(self: *Lexer) LexerError!void {
