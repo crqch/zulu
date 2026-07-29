@@ -225,31 +225,55 @@ pub fn inferType(self: *TypeChecker, expression: *Expression) TypeError!*Type {
 }
 
 pub fn finalizeType(self: *TypeChecker, tp: *Type) *Type {
+    var visited = std.AutoHashMap(*Type, void).init(self.allocator);
+    defer visited.deinit();
+
+    return self._finalizeType(tp, &visited);
+}
+
+fn _finalizeType(self: *TypeChecker, tp: *Type, visited: *std.AutoHashMap(*Type, void)) *Type {
     const resolved = self.applySubstitutions(tp);
+
+    if (visited.contains(resolved)) return resolved;
+    visited.put(resolved, {}) catch {};
 
     switch (resolved.*) {
         .lambda => {
-            resolved.lambda.argument = self.finalizeType(resolved.lambda.argument);
-            resolved.lambda.returns = self.finalizeType(resolved.lambda.returns);
+            resolved.lambda.argument = self._finalizeType(resolved.lambda.argument, visited);
+            resolved.lambda.returns = self._finalizeType(resolved.lambda.returns, visited);
         },
         .scope => |scope| {
-            var it_values = scope.values.iterator();
-            while (it_values.next()) |entry| {
-                entry.value_ptr.* = self.finalizeType(entry.value_ptr.*);
-            }
+            var curr_scope: ?*Scope = scope;
+            while (curr_scope) |s| {
+                var it_values = s.values.iterator();
+                while (it_values.next()) |entry| {
+                    entry.value_ptr.* = self._finalizeType(entry.value_ptr.*, visited);
+                }
 
-            var it_types = scope.types.iterator();
-            while (it_types.next()) |entry| {
-                entry.value_ptr.* = self.finalizeType(entry.value_ptr.*);
+                var it_types = s.types.iterator();
+                while (it_types.next()) |entry| {
+                    entry.value_ptr.* = self._finalizeType(entry.value_ptr.*, visited);
+                }
+                curr_scope = s.parent;
             }
         },
         .tuple => |tuple| {
             for (tuple, 0..) |t, i| {
-                tuple[i] = self.finalizeType(t);
+                tuple[i] = self._finalizeType(t, visited);
             }
         },
         .alias => |alias| {
-            resolved.alias.underlying = self.finalizeType(alias.underlying);
+            resolved.alias.underlying = self._finalizeType(alias.underlying, visited);
+        },
+        .variant => |variant| {
+            if (variant.payload) |payload| {
+                resolved.variant.payload = self._finalizeType(payload, visited);
+            }
+        },
+        .union_of => |un| {
+            for (un, 0..) |t, i| {
+                un[i] = self._finalizeType(t, visited);
+            }
         },
         else => {},
     }
@@ -1163,6 +1187,24 @@ fn occursInType(self: *TypeChecker, wildcard_id: usize, tp: *Type) bool {
     return self._occursInType(wildcard_id, tp, &visited);
 }
 
+fn freshenScope(self: *TypeChecker, scope: *Scope, cache: *std.AutoHashMap(usize, *Type)) TypeError!*Scope {
+    const fresh_parent = if (scope.parent) |p| (if (p.parent == null) p else try self.freshenScope(p, cache)) else null;
+    const fresh_scope = try Scope.init(self.allocator, fresh_parent);
+    var it_values = scope.values.iterator();
+    while (it_values.next()) |entry| {
+        const fresh_val = try self.freshenType(entry.value_ptr.*, cache);
+        try fresh_scope.addValue(entry.key_ptr.*, fresh_val);
+    }
+
+    var it_types = scope.types.iterator();
+    while (it_types.next()) |entry| {
+        const fresh_type = try self.freshenType(entry.value_ptr.*, cache);
+        try fresh_scope.addType(entry.key_ptr.*, fresh_type);
+    }
+
+    return fresh_scope;
+}
+
 fn freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Type)) TypeError!*Type {
     const resolved = self.applySubstitutions(tp);
     switch (resolved.*) {
@@ -1187,19 +1229,7 @@ fn freshenType(self: *TypeChecker, tp: *Type, cache: *std.AutoHashMap(usize, *Ty
             return try self.freshType(.{ .tuple = fresh_types });
         },
         .scope => |scope| {
-            const fresh_scope = try self.freshScope(scope.parent);
-            var it_values = scope.values.iterator();
-            while (it_values.next()) |entry| {
-                const fresh_val = try self.freshenType(entry.value_ptr.*, cache);
-                try fresh_scope.addValue(entry.key_ptr.*, fresh_val);
-            }
-
-            var it_types = scope.types.iterator();
-            while (it_types.next()) |entry| {
-                const fresh_type = try self.freshenType(entry.value_ptr.*, cache);
-                try fresh_scope.addType(entry.key_ptr.*, fresh_type);
-            }
-
+            const fresh_scope = try self.freshenScope(scope, cache);
             return try self.freshType(.{ .scope = fresh_scope });
         },
         .alias => {
