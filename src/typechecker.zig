@@ -4,6 +4,7 @@ const Expression = @import("./ast.zig").Expression;
 const TypeAst = @import("./ast.zig").TypeAst;
 const MatchPattern = @import("./ast.zig").MatchPattern;
 const SharedContext = @import("./shared.zig");
+const BuiltIn = @import("./builtin.zig");
 
 const TypeChecker = @This();
 allocator: std.mem.Allocator,
@@ -35,6 +36,7 @@ pub const Type = union(enum) {
         argument: *Type,
         returns: *Type,
     },
+    builtin: *const fn (*TypeChecker, *Type) TypeError!*Type,
 
     scope: *Scope,
     tuple: []*Type,
@@ -186,6 +188,31 @@ fn freshScope(self: *TypeChecker, parent_scope: ?*Scope) !*Scope {
         try fresh_scope.addType("float", self.primitive_types.float);
         try fresh_scope.addType("unit", self.primitive_types.unit);
         try fresh_scope.addType("string", self.primitive_types.string);
+
+        { // math builtins
+            const intAndIntToInt = try self.freshType(.{ .builtin = BuiltIn.Types.intAndIntToInt });
+            const floatToFloat = try self.freshType(.{ .builtin = BuiltIn.Types.floatToFloat });
+
+            try fresh_scope.addValue("<@math.mod>", intAndIntToInt);
+
+            inline for (.{ "sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh" }) |name| {
+                try fresh_scope.addValue("<@math." ++ name ++ ">", floatToFloat);
+            }
+
+            try fresh_scope.addValue("<@math.log2>", floatToFloat);
+            try fresh_scope.addValue("<@math.log10>", floatToFloat);
+            try fresh_scope.addValue("<@math.log>", try self.freshType(.{ .builtin = BuiltIn.Types.floatAndFloatToFloat }));
+
+            try fresh_scope.addValue("<@math.sqrt>", floatToFloat);
+            try fresh_scope.addValue("<@math.cbrt>", floatToFloat);
+
+            try fresh_scope.addValue("<@math.round>", floatToFloat);
+            try fresh_scope.addValue("<@math.floor>", floatToFloat);
+            try fresh_scope.addValue("<@math.ceil>", floatToFloat);
+            try fresh_scope.addValue("<@math.trunc>", floatToFloat);
+
+            try fresh_scope.addValue("<@math.gcd>", intAndIntToInt);
+        }
     }
 
     return fresh_scope;
@@ -230,7 +257,7 @@ pub fn finalizeType(self: *TypeChecker, tp: *Type) *Type {
     return resolved;
 }
 
-fn freshWildcard(self: *TypeChecker) !*Type {
+pub fn freshWildcard(self: *TypeChecker) !*Type {
     const wildcard = try self.freshType(.{ .wildcard = self.next_wildcard_id });
     self.next_wildcard_id += 1;
     return wildcard;
@@ -314,6 +341,7 @@ pub const PrettyPrinter = struct {
                 }
                 return buf.items;
             },
+            .builtin => "builtin",
             .scope => |scope| {
                 var str = try std.ArrayList(u8).initCapacity(self.allocator, 0);
 
@@ -519,6 +547,15 @@ pub fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) Ty
             const callee_type = self.applySubstitutions(try self._inferType(application.callee, scope));
 
             const arg_type = try self.freshWildcard();
+            if (callee_type.* == .builtin) {
+                const value_type = try self._inferType(application.value, scope);
+
+                return try callee_type.builtin(
+                    self,
+                    value_type,
+                );
+            }
+
             const return_type = try self.freshWildcard();
 
             const lambda_type = try self.freshType(.{ .lambda = .{

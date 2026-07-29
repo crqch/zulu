@@ -175,6 +175,9 @@ pub fn run(self: *Pipeline, shared_context: *SharedContext, file_path: []const u
             InterpreterError.FloatParsingFailed => {
                 std.debug.print("Failed to parse float value.\n", .{});
             },
+            InterpreterError.NegativeNumbersInGCD => {
+                std.debug.print("Negative number supplied to GCD.\n", .{});
+            },
             InterpreterError.IntParsingFailed => {
                 std.debug.print("Failed to parse integer value.\n", .{});
             },

@@ -101,7 +101,7 @@ fn nud(self: *Parser) ParserError!*Expression {
         .lbra => self.lambdaNud(),
         .kw_if => self.ifNud(),
         .kw_match => self.matchNud(),
-        .kw_mod => self.moduleNud(),
+        .kw_module => self.moduleNud(),
         .kw_type => self.typeNud(),
         .kw_import => self.importNud(),
         .kw_env => self.envNud(),
@@ -696,7 +696,7 @@ fn isAtPrimaryStart(self: *Parser) bool {
         token_type == .ident or
         token_type == .kw_type or
         token_type == .kw_env or
-        token_type == .kw_mod;
+        token_type == .kw_module;
 }
 
 fn previousToken(self: *Parser) Token {
