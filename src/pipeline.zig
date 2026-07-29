@@ -151,6 +151,10 @@ pub fn run(self: *Pipeline, shared_context: *SharedContext, file_path: []const u
                 printErrorLocation("Type Error", file_path);
                 std.debug.print("Unbound variable `{s}`\n" ++ ansi.reset, .{type_checker.error_context.?.unbound_variable.variable});
             },
+            TypeError.PropertyNotFoundOnObject => {
+                printErrorLocation("Type Error", file_path);
+                std.debug.print("Property `{s}` not found on object\n" ++ ansi.reset, .{type_checker.error_context.?.unbound_variable.variable});
+            },
             else => {
                 printErrorLocation("Type Error", file_path);
                 std.debug.print("{}\n", .{err});

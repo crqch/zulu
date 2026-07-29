@@ -1006,6 +1006,8 @@ pub fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) Ty
                 return try self.freshenType(memberTp, &cache);
             }
 
+            self.error_context = .{ .unbound_variable = .{ .variable = member_access.member } };
+
             return TypeError.PropertyNotFoundOnObject;
         },
         .module => |module| {
