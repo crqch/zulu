@@ -316,7 +316,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
             var block_environment = try Env.init(self.allocator, environment);
 
             const identifier = try self.reallocateIdentifier(declaration.identifier);
-            const evaluated_expression = try self._eval(declaration.expression, if (declaration.identifier[0] == '@') block_environment else environment);
+            const evaluated_expression = try self._eval(declaration.expression, if (declaration.expression.* == .lambda or declaration.identifier[0] == '@') block_environment else environment);
 
             try block_environment.add(identifier, evaluated_expression);
 
@@ -333,6 +333,7 @@ fn _eval(self: *Interpreter, expression: *Expression, environment: *Env) Interpr
                 .closure => |closure| {
                     const closure_environment = try Env.init(self.allocator, closure.env);
                     try closure_environment.add(closure.node.lambda.identifier, evaluated_value);
+                    try closure_environment.add("@", evaluated_callee);
                     return try self._eval(closure.node.lambda.block, closure_environment);
                 },
                 .builtin => |builtin_fn| {

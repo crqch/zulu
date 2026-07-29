@@ -798,7 +798,11 @@ pub fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) Ty
             if (declaration.explicit_type) |explicitTypeAst| {
                 explicit_type_optional = try self.parseTypeAst(explicitTypeAst.*, scope);
             }
-            if (declaration.identifier[0] == '@') {
+
+            const is_recursive = declaration.expression.* == .lambda or declaration
+                .identifier[0] == '@';
+
+            if (is_recursive) {
                 const ident_type = try self.freshWildcard();
                 try block_scope.addValue(identifier, ident_type);
                 const expression_type = try self._inferType(declaration.expression, block_scope);
@@ -895,7 +899,15 @@ pub fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) Ty
         .lambda => |lambda| {
             const closure_environment = try self.freshScope(scope);
             const argument_type = try self.freshWildcard();
+            const return_type = try self.freshWildcard();
+
+            const lambda_type = try self.freshType(.{ .lambda = .{
+                .argument = argument_type,
+                .returns = return_type,
+            } });
+
             try closure_environment.addValue(lambda.identifier, argument_type);
+            try closure_environment.addValue("@", lambda_type);
 
             if (expression.*.lambda.explicit_argument_type) |explicitTypeAst| {
                 const explicit_type = try self.parseTypeAst(explicitTypeAst.*, scope);
@@ -903,11 +915,7 @@ pub fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) Ty
             }
 
             const body_type = try self._inferType(lambda.block, closure_environment);
-
-            const lambda_type = try self.freshType(.{ .lambda = .{
-                .argument = argument_type,
-                .returns = body_type,
-            } });
+            try self.unifyTypes(return_type, body_type);
 
             expression.*.lambda.inferred_type = lambda_type;
 

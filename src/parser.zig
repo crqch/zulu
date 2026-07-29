@@ -94,6 +94,7 @@ fn nud(self: *Parser) ParserError!*Expression {
         .number => self.numberNud(),
         .string => self.stringNud(),
         .ident => self.identNud(),
+        .at => self.identNud(),
         .kw_true, .kw_false => self.boolNud(),
         .minus => self.unaryMinusNud(),
         .bang => self.notNud(),
