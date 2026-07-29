@@ -1,0 +1,70 @@
+type list =
+    | Cons of int * list
+    | Empty;
+
+empty=Empty;
+
+cons=[hd tl; Cons (hd,tl)];
+
+hd=[xs;match xs
+    | Cons x, _ => x
+    | Empty => 0      // TODO: throw exception: x on empty list!
+];
+
+tl=[xs;match xs
+    | Cons _, xs => xs
+    | Empty => Empty  // TODO: throw exception: xs on empty list!
+];
+
+
+map=[xs f;
+        match xs
+        | Cons x, xs => Cons (f x, map xs f)
+        | Empty => Empty
+    ];
+
+iter=[xs (f: int => unit);
+        match xs
+        | Cons x, xs => _=f x; iter xs f
+        | Empty => ()
+    ];
+
+// fold_left : ('b -> 'a -> 'b) -> 'b -> 'a list -> 'b
+fold_left=[f acc xs;
+        match xs
+        | Cons x, xs => fold_left f (f acc x) xs
+        | Empty => acc
+    ];
+
+// fold_right : ('a -> 'b -> 'b) -> 'a list -> 'b -> 'b
+fold_right=[f xs acc;
+    match xs
+        | Cons x, xs => f x (fold_right f xs acc)
+        | Empty => acc
+];
+
+filter=[xs f;
+    match xs
+        | Cons x, xs => if(f x) Cons(x, filter xs f) else filter xs f
+        | Empty => Empty
+];
+
+len=[xs; fold_left [acc _; acc + 1] 0 xs];
+
+find=[xs f;
+    match xs
+        | Cons x, xs => if(f x) x else find xs f
+        | Empty => 0     // TODO: throw exception: x is not found on empty list!
+];
+
+exists=[xs f;
+    match xs
+        | Cons x, xs => if(f x) true else exists xs f
+        | Empty => false
+];
+
+for_all=[xs f;
+    match xs
+        | Cons x, xs => if(f x) for_all xs f else false
+        | Empty => true
+];
