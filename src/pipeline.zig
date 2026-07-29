@@ -147,6 +147,10 @@ pub fn run(self: *Pipeline, shared_context: *SharedContext, file_path: []const u
                     std.debug.print("But got: " ++ ansi.blue ++ "{s}" ++ ansi.reset ++ "\n", .{try TypeChecker.PrettyPrinter.prettyPrint(self.type_arena.allocator(), type_checker.finalizeType(context.unexpected_type.found_type))});
                 }
             },
+            TypeError.UnboundVariable => {
+                printErrorLocation("Type Error", file_path);
+                std.debug.print("Unbound variable `{s}`\n" ++ ansi.reset, .{type_checker.error_context.?.unbound_variable.variable});
+            },
             else => {
                 printErrorLocation("Type Error", file_path);
                 std.debug.print("{}\n", .{err});
@@ -200,7 +204,7 @@ pub fn run(self: *Pipeline, shared_context: *SharedContext, file_path: []const u
     };
     return ReturnValue{
         .value = value,
-        .type = program_type,
+        .type = type_checker.finalizeType(program_type),
     };
 }
 
