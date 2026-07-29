@@ -917,7 +917,7 @@ pub fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) Ty
             const body_type = try self._inferType(lambda.block, closure_environment);
             try self.unifyTypes(return_type, body_type);
 
-            expression.*.lambda.inferred_type = lambda_type;
+            expression.*.lambda.inferred_type = self.finalizeType(lambda_type);
 
             return lambda_type;
         },
