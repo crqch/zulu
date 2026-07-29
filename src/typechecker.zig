@@ -557,9 +557,18 @@ pub fn _inferType(self: *TypeChecker, expression: *Expression, scope: *Scope) Ty
             return tp;
         },
         .variable => |variable| {
-            const tp = scope.getValue(variable);
+            if (scope.getType(variable)) |tp| {
+                if (tp.* == .variant and tp.variant.payload == null) {
+                    expression.* = .{ .constructor = .{
+                        .name = variable,
+                        .payload = null,
+                    } };
 
-            if (tp) |val| return self.applySubstitutions(val);
+                    return tp.variant.parent_union orelse return TypeError.CannotUnify;
+                }
+            }
+
+            if (scope.getValue(variable)) |val| return self.applySubstitutions(val);
             self.error_context = .{
                 .unbound_variable = .{
                     .variable = variable,

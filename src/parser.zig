@@ -330,14 +330,6 @@ fn stringNud(self: *Parser) ParserError!*Expression {
 fn identNud(self: *Parser) ParserError!*Expression {
     const lexeme = self.previousToken().lexeme;
     const first_char = lexeme[0];
-    if (first_char >= 'A' and first_char <= 'Z') {
-        return try self.newExpression(Expression{
-            .constructor = .{
-                .name = lexeme,
-                .payload = null,
-            },
-        });
-    }
 
     if (first_char == '@' and lexeme.len > 1 and lexeme[1] == '"') {
         return try self.newExpression(Expression{
@@ -480,8 +472,12 @@ fn memberAccessLed(self: *Parser, left: *Expression, min_bp: u8) ParserError!*Ex
 fn applicationLed(self: *Parser, left: *Expression) ParserError!*Expression {
     const right = try self.parseExpression(Precedence.call + 1);
 
-    if (left.* == .constructor) {
-        left.constructor.payload = right;
+    if (left.* == .variable and std.ascii.isUpper(left.variable[0])) {
+        const name = left.variable;
+        left.* = .{ .constructor = .{
+            .name = name,
+            .payload = right,
+        } };
 
         return left;
     }
