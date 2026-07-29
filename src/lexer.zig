@@ -35,7 +35,6 @@ pub const TokenType = enum {
     lt_eq,
     not_eq_eq,
     eq_eq,
-    slash_slash,
 
     arrow,
 
@@ -182,6 +181,14 @@ fn scanToken(self: *Lexer) LexerError!void {
                 }
             }
 
+            if (char == '/') {
+                if (self.match('/')) {
+                    while (!self.isAtEnd() and self.peek() != '\n') self.skip();
+                    return;
+                }
+                return try self.addToken(.slash);
+            }
+
             return try self.addToken(switch (char) {
                 '+' => .plus,
                 '-' => .minus,
@@ -189,7 +196,6 @@ fn scanToken(self: *Lexer) LexerError!void {
                 ',' => .comma,
                 '|' => .pipe,
                 ':' => .colon,
-                '/' => if (self.match('/')) .slash_slash else .slash,
                 '>' => if (self.match('=')) .gt_eq else .gt,
                 '<' => if (self.match('=')) .lt_eq else .lt,
                 '=' => if (self.match('=')) .eq_eq else if (self.match('>')) .arrow else .eq,
